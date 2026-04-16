@@ -5,8 +5,14 @@ const STORAGE_KEYS = {
 };
 
 const env = (typeof import.meta !== "undefined" && import.meta.env) ? import.meta.env : {};
-const REMOTE_EVENTS_URL = env.VITE_EVENTFLOW_EVENTS_BLOB_URL || "https://jsonblob.com/api/jsonBlob/019d9725-a658-795a-9147-e17fd51f5207";
-const REMOTE_REGISTRATIONS_URL = env.VITE_EVENTFLOW_REGISTRATIONS_BLOB_URL || "https://jsonblob.com/api/jsonBlob/019d9725-aa52-7c74-9281-2ce60fe6471f";
+const REMOTE_EVENTS_URL =
+  env.VITE_EVENTFLOW_EVENTS_ENDPOINT ||
+  env.VITE_EVENTFLOW_EVENTS_BLOB_URL ||
+  "/storage/events";
+const REMOTE_REGISTRATIONS_URL =
+  env.VITE_EVENTFLOW_REGISTRATIONS_ENDPOINT ||
+  env.VITE_EVENTFLOW_REGISTRATIONS_BLOB_URL ||
+  "/storage/registrations";
 const REMOTE_DISABLED = String(env.VITE_EVENTFLOW_REMOTE_DISABLED || "false") === "true";
 const REMOTE_ENABLED = !REMOTE_DISABLED && Boolean(REMOTE_EVENTS_URL && REMOTE_REGISTRATIONS_URL);
 
@@ -58,12 +64,38 @@ const defaultEvents = [
   },
 ];
 
+const memoryStorage = {
+  store: new Map(),
+  getItem(key) {
+    return this.store.has(key) ? this.store.get(key) : null;
+  },
+  setItem(key, value) {
+    this.store.set(key, String(value));
+  },
+  removeItem(key) {
+    this.store.delete(key);
+  },
+};
+
 const canUseStorage = () => typeof window !== "undefined" && !!window.localStorage;
 
-const readStorage = (key, fallback) => {
-  if (!canUseStorage()) return fallback;
+const getStorage = () => {
+  if (!canUseStorage()) return memoryStorage;
   try {
-    const raw = window.localStorage.getItem(key);
+    // Access can throw in restricted browsers (privacy mode / blocked storage).
+    const probeKey = "__eventflow_probe__";
+    window.localStorage.setItem(probeKey, "1");
+    window.localStorage.removeItem(probeKey);
+    return window.localStorage;
+  } catch {
+    return memoryStorage;
+  }
+};
+
+const readStorage = (key, fallback) => {
+  const storage = getStorage();
+  try {
+    const raw = storage.getItem(key);
     if (!raw) return fallback;
     return JSON.parse(raw);
   } catch {
@@ -72,9 +104,9 @@ const readStorage = (key, fallback) => {
 };
 
 const writeStorage = (key, value) => {
-  if (!canUseStorage()) return;
+  const storage = getStorage();
   try {
-    window.localStorage.setItem(key, JSON.stringify(value));
+    storage.setItem(key, JSON.stringify(value));
   } catch {
     // no-op in restricted environments
   }
@@ -102,9 +134,14 @@ const fetchJson = async (url, options = {}) => {
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
+    const hasBody = Object.prototype.hasOwnProperty.call(options, "body");
     const response = await fetch(url, {
       ...options,
-      headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+      // Keep GET requests simple to reduce CORS/preflight failures.
+      headers: {
+        ...(hasBody ? { "Content-Type": "application/json" } : { Accept: "application/json" }),
+        ...(options.headers || {}),
+      },
       signal: controller?.signal,
     });
     if (!response.ok) throw new Error(`Remote storage error ${response.status}`);

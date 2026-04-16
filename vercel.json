@@ -1,5 +1,13 @@
 {
   "rewrites": [
+    {
+      "source": "/storage/events",
+      "destination": "https://jsonblob.com/api/jsonBlob/019d9725-a658-795a-9147-e17fd51f5207"
+    },
+    {
+      "source": "/storage/registrations",
+      "destination": "https://jsonblob.com/api/jsonBlob/019d9725-aa52-7c74-9281-2ce60fe6471f"
+    },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

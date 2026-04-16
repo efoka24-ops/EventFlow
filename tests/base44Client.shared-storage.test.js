@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const EVENTS_URL = "https://jsonblob.com/api/jsonBlob/019d9725-a658-795a-9147-e17fd51f5207";
-const REGS_URL = "https://jsonblob.com/api/jsonBlob/019d9725-aa52-7c74-9281-2ce60fe6471f";
+const EVENTS_URL = "/storage/events";
+const REGS_URL = "/storage/registrations";
 
 describe("base44Client shared storage", () => {
   beforeEach(() => {
