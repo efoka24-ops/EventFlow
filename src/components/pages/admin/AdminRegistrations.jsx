@@ -185,15 +185,15 @@ export default function AdminRegistrations() {
     <div>
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <h1 className="text-2xl font-bold">Gestion des inscriptions</h1>
-        <div className="flex items-center gap-3 flex-wrap">
-          <Button variant="outline" onClick={handleExportCsv} className="gap-2">
+        <div className="flex items-center gap-3 flex-wrap w-full sm:w-auto">
+          <Button variant="outline" onClick={handleExportCsv} className="gap-2 w-full sm:w-auto">
             <Download className="w-4 h-4" /> Export CSV
           </Button>
-          <Button variant="outline" onClick={handleExportExcel} className="gap-2">
+          <Button variant="outline" onClick={handleExportExcel} className="gap-2 w-full sm:w-auto">
             <FileSpreadsheet className="w-4 h-4" /> Export Excel
           </Button>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

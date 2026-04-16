@@ -51,9 +51,9 @@ export default function AdminEvents() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <h1 className="text-2xl font-bold">Gestion des événements</h1>
-        <Button onClick={() => { setEditingEvent(null); setShowForm(true); }} className="gap-2">
+        <Button onClick={() => { setEditingEvent(null); setShowForm(true); }} className="gap-2 w-full sm:w-auto">
           <Plus className="w-4 h-4" /> Nouveau
         </Button>
       </div>
