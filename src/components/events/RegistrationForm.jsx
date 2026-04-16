@@ -7,8 +7,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Mail, FileText, Loader2, CheckCircle2, User } from "lucide-react";
+import { Mail, FileText, Loader2, CheckCircle2, User, Download } from "lucide-react";
 import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
+import { generateTicketPDF } from "@/utils/generateTicket";
+import { normalizeParticipantEmail, setParticipantEmail } from "@/lib/participantSession";
 
 const isGmailEmail = (email) => /@gmail\.com$/i.test((email || "").trim());
 
@@ -48,6 +51,8 @@ export default function RegistrationForm({ event, onSuccess }) {
   const [method, setMethod] = useState(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [savedRegistration, setSavedRegistration] = useState(null);
+  const [ticketLoading, setTicketLoading] = useState(false);
   const [geo, setGeo] = useState({
     latitude: null,
     longitude: null,
@@ -160,43 +165,63 @@ export default function RegistrationForm({ event, onSuccess }) {
     e.preventDefault();
     setLoading(true);
 
-    const emailProvider = detectEmailProvider(formData.email);
-    const hasGmailAccount = isGmailEmail(formData.email) || isGmailEmail(currentUser?.email);
+    try {
+      const emailProvider = detectEmailProvider(formData.email);
+      const hasGmailAccount = isGmailEmail(formData.email) || isGmailEmail(currentUser?.email);
 
-    const registrationData = {
-      event_id: event.id,
-      first_name: formData.first_name,
-      last_name: formData.last_name,
-      email: formData.email || undefined,
-      phone: formData.phone || undefined,
-      gender: formData.gender || undefined,
-      age: formData.age ? Number(formData.age) : undefined,
-      id_type: formData.id_type || undefined,
-      id_number: formData.id_number || undefined,
-      geo_latitude: geo.latitude,
-      geo_longitude: geo.longitude,
-      geo_accuracy: geo.accuracy,
-      geo_location_label: geo.label,
-      geo_city: geo.city,
-      geo_region: geo.region,
-      geo_country: geo.country,
-      email_provider: emailProvider,
-      has_gmail_account: hasGmailAccount,
-      status: "en_attente",
-      registration_method: method,
-    };
+      const registrationData = {
+        event_id: event.id,
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        email: normalizeParticipantEmail(formData.email) || undefined,
+        phone: formData.phone || undefined,
+        gender: formData.gender || undefined,
+        age: formData.age ? Number(formData.age) : undefined,
+        id_type: formData.id_type || undefined,
+        id_number: formData.id_number || undefined,
+        geo_latitude: geo.latitude,
+        geo_longitude: geo.longitude,
+        geo_accuracy: geo.accuracy,
+        geo_location_label: geo.label,
+        geo_city: geo.city,
+        geo_region: geo.region,
+        geo_country: geo.country,
+        email_provider: emailProvider,
+        has_gmail_account: hasGmailAccount,
+        status: "en_attente",
+        registration_method: method,
+      };
 
-    await base44.entities.Registration.create(registrationData);
-    setLoading(false);
-    setSuccess(true);
-    toast.success("Inscription envoyée avec succès !");
-    if (onSuccess) onSuccess();
+      const created = await base44.entities.Registration.create(registrationData);
+      setSavedRegistration(created || { ...registrationData, id: registrationData.id_number || Date.now().toString(), created_date: new Date().toISOString() });
+      if (registrationData.email) {
+        setParticipantEmail(registrationData.email);
+      }
+      setSuccess(true);
+      toast.success("Inscription envoyée avec succès !");
+      if (onSuccess) onSuccess();
+    } catch {
+      toast.error("Impossible d'envoyer l'inscription pour le moment. Réessayez dans quelques instants.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const emailProvider = detectEmailProvider(formData.email);
   const hasGmailAccount = isGmailEmail(formData.email) || isGmailEmail(currentUser?.email);
 
   if (success) {
+    const handleDownloadTicket = async () => {
+      setTicketLoading(true);
+      try {
+        await generateTicketPDF({ event, registration: savedRegistration || formData });
+      } catch {
+        toast.error("Impossible de générer le billet. Réessayez.");
+      } finally {
+        setTicketLoading(false);
+      }
+    };
+
     return (
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
         <Card className="py-8">
@@ -211,6 +236,20 @@ export default function RegistrationForm({ event, onSuccess }) {
                 {formData.email && " Vous recevrez un email de confirmation."}
               </p>
             </div>
+            <Button
+              onClick={handleDownloadTicket}
+              disabled={ticketLoading}
+              className="w-full gap-2"
+              variant="outline"
+            >
+              {ticketLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {ticketLoading ? "Génération du billet..." : "Télécharger mon billet (PDF)"}
+            </Button>
+            <Link to="/participant/tickets" className="block">
+              <Button className="w-full" variant="secondary">
+                Voir le statut de mon billet
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       </motion.div>

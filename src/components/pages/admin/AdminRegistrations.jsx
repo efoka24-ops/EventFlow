@@ -35,11 +35,13 @@ export default function AdminRegistrations() {
   const { data: registrations = [], isLoading } = useQuery({
     queryKey: ["admin-registrations"],
     queryFn: () => base44.entities.Registration.list("-created_date"),
+    refetchOnMount: "always",
   });
 
   const { data: events = [] } = useQuery({
     queryKey: ["admin-events"],
     queryFn: () => base44.entities.Event.list(),
+    refetchOnMount: "always",
   });
 
   const getEventTitle = (eventId) => {
@@ -125,53 +127,88 @@ export default function AdminRegistrations() {
 
   const handleValidate = async (reg) => {
     setValidatingId(reg.id);
-    await base44.entities.Registration.update(reg.id, { status: "validee" });
-
-    if (reg.email) {
+    try {
       const event = getEvent(reg.event_id);
-      await base44.integrations.Core.SendEmail({
-        to: reg.email,
-        subject: `✅ Inscription validée - ${event?.title || "Événement"}`,
-        body: `
-          <h2>Bonjour ${reg.first_name} ${reg.last_name},</h2>
-          <p>Votre inscription à l'événement <strong>${event?.title || ""}</strong> a été <strong>validée</strong> !</p>
-          ${event ? `
-          <h3>Informations de l'événement :</h3>
-          <ul>
-            <li><strong>Date :</strong> ${event.date_start ? format(new Date(event.date_start), "d MMMM yyyy à HH:mm", { locale: fr }) : "À confirmer"}</li>
-            <li><strong>Lieu :</strong> ${event.location_name || event.city || "À confirmer"}</li>
-            ${event.address ? `<li><strong>Adresse :</strong> ${event.address}</li>` : ""}
-          </ul>` : ""}
-          <p>À bientôt !</p>
-          <p><em>L'équipe EventFlow</em></p>
-        `,
-      });
-    }
+      const patch = {
+        status: "validee",
+        validated_date: new Date().toISOString(),
+        notification_status: "pending",
+      };
 
-    queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
-    toast.success("Inscription validée et email envoyé !");
-    setValidatingId(null);
+      if (reg.email) {
+        await base44.integrations.Core.SendEmail({
+          to: reg.email,
+          subject: `✅ Inscription validée - ${event?.title || "Événement"}`,
+          body: `
+            <h2>Bonjour ${reg.first_name} ${reg.last_name},</h2>
+            <p>Votre inscription à l'événement <strong>${event?.title || ""}</strong> a été <strong>validée</strong> !</p>
+            ${event ? `
+            <h3>Informations de l'événement :</h3>
+            <ul>
+              <li><strong>Date :</strong> ${event.date_start ? format(new Date(event.date_start), "d MMMM yyyy à HH:mm", { locale: fr }) : "À confirmer"}</li>
+              <li><strong>Lieu :</strong> ${event.location_name || event.city || "À confirmer"}</li>
+              ${event.address ? `<li><strong>Adresse :</strong> ${event.address}</li>` : ""}
+            </ul>` : ""}
+            <p>Connectez-vous à votre espace participant avec cet email pour suivre votre billet en temps réel.</p>
+            <p><em>L'équipe EventFlow</em></p>
+          `,
+        });
+        patch.notification_status = "sent";
+        patch.notification_sent_at = new Date().toISOString();
+      }
+
+      await base44.entities.Registration.update(reg.id, patch);
+      queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
+      toast.success(reg.email ? "Inscription validée et email envoyé" : "Inscription validée");
+    } catch {
+      await base44.entities.Registration.update(reg.id, {
+        status: "validee",
+        validated_date: new Date().toISOString(),
+        notification_status: "failed",
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
+      toast.error("Inscription validée, mais l'email n'a pas pu être envoyé");
+    } finally {
+      setValidatingId(null);
+    }
   };
 
   const handleRefuse = async (reg) => {
-    await base44.entities.Registration.update(reg.id, { status: "refusee" });
-
-    if (reg.email) {
+    try {
       const event = getEvent(reg.event_id);
-      await base44.integrations.Core.SendEmail({
-        to: reg.email,
-        subject: `Inscription refusée - ${event?.title || "Événement"}`,
-        body: `
-          <h2>Bonjour ${reg.first_name} ${reg.last_name},</h2>
-          <p>Nous sommes désolés, votre inscription à l'événement <strong>${event?.title || ""}</strong> n'a pas pu être validée.</p>
-          <p>N'hésitez pas à consulter d'autres événements disponibles sur notre plateforme.</p>
-          <p><em>L'équipe EventFlow</em></p>
-        `,
-      });
-    }
+      const patch = {
+        status: "refusee",
+        refused_date: new Date().toISOString(),
+        notification_status: "pending",
+      };
 
-    queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
-    toast.success("Inscription refusée");
+      if (reg.email) {
+        await base44.integrations.Core.SendEmail({
+          to: reg.email,
+          subject: `Inscription refusée - ${event?.title || "Événement"}`,
+          body: `
+            <h2>Bonjour ${reg.first_name} ${reg.last_name},</h2>
+            <p>Nous sommes désolés, votre inscription à l'événement <strong>${event?.title || ""}</strong> n'a pas pu être validée.</p>
+            <p>Connectez-vous à votre espace participant avec cet email pour suivre vos demandes.</p>
+            <p><em>L'équipe EventFlow</em></p>
+          `,
+        });
+        patch.notification_status = "sent";
+        patch.notification_sent_at = new Date().toISOString();
+      }
+
+      await base44.entities.Registration.update(reg.id, patch);
+      queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
+      toast.success("Inscription refusée");
+    } catch {
+      await base44.entities.Registration.update(reg.id, {
+        status: "refusee",
+        refused_date: new Date().toISOString(),
+        notification_status: "failed",
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
+      toast.error("Statut mis à jour, mais l'email n'a pas pu être envoyé");
+    }
   };
 
   const handleDelete = async () => {

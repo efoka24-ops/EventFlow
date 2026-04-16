@@ -10,10 +10,14 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import Home from '@/components/pages/Home';
 import Events from '@/components/pages/Events';
 import EventDetail from '@/components/pages/EventDetail';
+import Help from '@/components/pages/Help';
+import ParticipantTickets from '@/components/pages/ParticipantTickets';
+import SubmitEvent from '@/components/pages/SubmitEvent';
 import AdminLogin from '@/components/pages/admin/AdminLogin';
 import Dashboard from '@/components/pages/admin/Dashboard';
 import AdminEvents from '@/components/pages/admin/AdminEvents';
 import AdminRegistrations from '@/components/pages/admin/AdminRegistrations';
+import AdminHelp from '@/components/pages/admin/AdminHelp';
 
 const isAdminUser = (user) => {
   if (!user) return false;
@@ -56,6 +60,9 @@ const AuthenticatedApp = () => {
         <Route path="/" element={<Home />} />
         <Route path="/events" element={<Events />} />
         <Route path="/events/:id" element={<EventDetail />} />
+        <Route path="/help" element={<Help />} />
+        <Route path="/submit-event" element={<SubmitEvent />} />
+        <Route path="/participant/tickets" element={<ParticipantTickets />} />
         <Route path="/admin/login" element={<AdminLogin />} />
       </Route>
       {canAccessAdmin && (
@@ -63,6 +70,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin" element={<Dashboard />} />
           <Route path="/admin/events" element={<AdminEvents />} />
           <Route path="/admin/registrations" element={<AdminRegistrations />} />
+          <Route path="/admin/help" element={<AdminHelp />} />
         </Route>
       )}
       {!canAccessAdmin && <Route path="/admin/*" element={<Navigate to="/admin/login" replace />} />}
