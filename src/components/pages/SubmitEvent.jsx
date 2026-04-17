@@ -1,5 +1,5 @@
-import React, { useRef, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import React, { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { base44 } from "@/api/base44Client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,17 @@ import { Button } from "@/components/ui/button";
 import { CATEGORIES } from "@/lib/constants";
 import { Loader2, ImagePlus, X } from "lucide-react";
 import { toast } from "sonner";
+import {
+  clearCreatorAccountId,
+  clearCreatorIdentity,
+  getCreatorAccountId,
+  normalizeEmail,
+  normalizeIdentifier,
+  normalizePhone,
+  setCreatorIdentity,
+  setCreatorAccountId,
+} from "@/lib/creatorSession";
+import { trackUserAction } from "@/lib/trackUserAction";
 
 export default function SubmitEvent() {
   const queryClient = useQueryClient();
@@ -17,6 +28,30 @@ export default function SubmitEvent() {
   const [loading, setLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState(null);
+  const [authMode, setAuthMode] = useState("login");
+  const [loginIdentifier, setLoginIdentifier] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [signupName, setSignupName] = useState("");
+  const [signupEmail, setSignupEmail] = useState("");
+  const [signupPhone, setSignupPhone] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
+  const [creatorAccountId, setCreatorAccountIdState] = useState(getCreatorAccountId());
+  const [activeCreatorAccount, setActiveCreatorAccount] = useState(null);
+
+  const { data: creatorAccounts = [], isLoading: isLoadingCreatorAccounts } = useQuery({
+    queryKey: ["creator-accounts"],
+    queryFn: () => base44.entities.CreatorAccount.list("-created_date"),
+    refetchOnMount: "always",
+  });
+
+  const creatorAccount =
+    activeCreatorAccount || creatorAccounts.find((item) => item.id === creatorAccountId) || null;
+
+  useEffect(() => {
+    if (!creatorAccountId || creatorAccounts.length === 0) return;
+    const matched = creatorAccounts.find((item) => item.id === creatorAccountId);
+    if (matched) setActiveCreatorAccount(matched);
+  }, [creatorAccountId, creatorAccounts]);
 
   const [form, setForm] = useState({
     organizer_name: "",
@@ -38,6 +73,92 @@ export default function SubmitEvent() {
 
   const handleChange = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const hydrateOrganizerFromAccount = (account) => {
+    setForm((prev) => ({
+      ...prev,
+      organizer_name: account.full_name || prev.organizer_name,
+      organizer_email: account.email || prev.organizer_email,
+      organizer_phone: account.phone || prev.organizer_phone,
+    }));
+  };
+
+  const handleLogin = () => {
+    if (isLoadingCreatorAccounts) {
+      toast.error("Chargement des comptes en cours, réessayez dans un instant.");
+      return;
+    }
+
+    const identifier = normalizeIdentifier(loginIdentifier);
+    const password = String(loginPassword || "").trim();
+    if (!identifier || !password) {
+      toast.error("Identifiant et mot de passe requis.");
+      return;
+    }
+
+    const account = creatorAccounts.find(
+      (item) => (item.email === identifier || item.phone === identifier) && String(item.password || "") === password
+    );
+
+    if (!account) {
+      toast.error("Compte introuvable ou mot de passe incorrect.");
+      return;
+    }
+
+    setCreatorAccountId(account.id);
+    setCreatorAccountIdState(account.id);
+    setActiveCreatorAccount(account);
+    setCreatorIdentity({ email: account.email, phone: account.phone });
+    hydrateOrganizerFromAccount(account);
+    trackUserAction({ action: "creator_account_login", user_email: account.email || null, context: "submit_event" });
+    toast.success("Connexion réussie. Vous pouvez maintenant créer un événement.");
+  };
+
+  const handleSignup = async () => {
+    const email = normalizeEmail(signupEmail);
+    const phone = normalizePhone(signupPhone);
+
+    if (!signupName.trim()) {
+      toast.error("Le nom est obligatoire.");
+      return;
+    }
+    if (!email && !phone) {
+      toast.error("Renseignez un email ou un numéro de téléphone.");
+      return;
+    }
+    if (!signupPassword || signupPassword.length < 4) {
+      toast.error("Le mot de passe doit contenir au moins 4 caractères.");
+      return;
+    }
+
+    try {
+      const account = await base44.entities.CreatorAccount.create({
+        full_name: signupName.trim(),
+        email: email || "",
+        phone: phone || "",
+        password: String(signupPassword).trim(),
+      });
+
+      queryClient.setQueryData(["creator-accounts"], (prev = []) => [account, ...prev]);
+      setCreatorAccountId(account.id);
+      setCreatorAccountIdState(account.id);
+      setActiveCreatorAccount(account);
+      setCreatorIdentity({ email: account.email, phone: account.phone });
+      hydrateOrganizerFromAccount(account);
+      trackUserAction({ action: "creator_account_created", user_email: account.email || null, context: "submit_event" });
+      toast.success("Compte créé avec succès. Vous pouvez maintenant créer un événement.");
+    } catch {
+      toast.error("Impossible de créer ce compte (email/téléphone peut être déjà utilisé).");
+    }
+  };
+
+  const handleLogout = () => {
+    clearCreatorAccountId();
+    clearCreatorIdentity();
+    setCreatorAccountIdState("");
+    setActiveCreatorAccount(null);
+    setForm((prev) => ({ ...prev, organizer_name: "", organizer_email: "", organizer_phone: "" }));
   };
 
   const handleImageSelect = async (e) => {
@@ -106,9 +227,22 @@ export default function SubmitEvent() {
         image_url: form.image_url || "",
         status: "publie",
         submitted_by_user: true,
-        organizer_name: form.organizer_name,
-        organizer_email: form.organizer_email.trim().toLowerCase(),
-        organizer_phone: form.organizer_phone || undefined,
+        organizer_name: creatorAccount?.full_name || form.organizer_name,
+        organizer_email: creatorAccount?.email || form.organizer_email.trim().toLowerCase(),
+        organizer_phone: creatorAccount?.phone || form.organizer_phone || undefined,
+      });
+
+      trackUserAction({
+        action: "event_created_by_user",
+        user_email: creatorAccount?.email || form.organizer_email.trim().toLowerCase(),
+        event_title: form.title,
+        event_category: form.category,
+        context: "submit_event",
+        metadata: {
+          city: form.city,
+          date_start: form.date_start,
+          max_participants: form.max_participants ? Number(form.max_participants) : null,
+        },
       });
 
       queryClient.invalidateQueries({ queryKey: ["admin-events"] });
@@ -128,28 +262,79 @@ export default function SubmitEvent() {
       <div className="mb-6">
         <h1 className="text-3xl font-bold mb-2">Proposer un événement</h1>
         <p className="text-muted-foreground">
-          Créez votre événement. Il sera publié automatiquement dès la soumission.
+          Vous devez avoir un compte (email ou téléphone) et vous connecter avant de créer un événement.
         </p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Formulaire de soumission</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
+      {!creatorAccount ? (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Connexion requise</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Button variant={authMode === "login" ? "default" : "outline"} onClick={() => setAuthMode("login")}>Se connecter</Button>
+              <Button variant={authMode === "signup" ? "default" : "outline"} onClick={() => setAuthMode("signup")}>Créer un compte</Button>
+            </div>
+
+            {authMode === "login" ? (
+              <div className="space-y-2">
+                <Input
+                  value={loginIdentifier}
+                  onChange={(e) => setLoginIdentifier(e.target.value)}
+                  placeholder="Email ou téléphone"
+                />
+                <Input
+                  type="password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="Mot de passe"
+                />
+                <Button onClick={handleLogin}>Connexion</Button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Input value={signupName} onChange={(e) => setSignupName(e.target.value)} placeholder="Nom complet" />
+                <Input value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} placeholder="Email (optionnel)" />
+                <Input value={signupPhone} onChange={(e) => setSignupPhone(e.target.value)} placeholder="Téléphone (optionnel)" />
+                <Input type="password" value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} placeholder="Mot de passe" />
+                <Button onClick={handleSignup}>Créer le compte</Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="mb-6">
+          <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Connecté en tant que</p>
+              <p className="font-semibold">{creatorAccount.full_name}</p>
+              <p className="text-xs text-muted-foreground">{creatorAccount.email || creatorAccount.phone}</p>
+            </div>
+            <Button variant="outline" onClick={handleLogout}>Se déconnecter</Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {creatorAccount ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Formulaire de soumission</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5 sm:col-span-1">
                 <Label>Nom organisateur *</Label>
-                <Input required value={form.organizer_name} onChange={(e) => handleChange("organizer_name", e.target.value)} />
+                <Input required value={form.organizer_name} readOnly className="bg-muted/50" />
               </div>
               <div className="space-y-1.5 sm:col-span-1">
-                <Label>Email organisateur *</Label>
-                <Input required type="email" value={form.organizer_email} onChange={(e) => handleChange("organizer_email", e.target.value)} />
+                <Label>Email organisateur</Label>
+                <Input type="email" value={form.organizer_email} readOnly className="bg-muted/50" />
               </div>
               <div className="space-y-1.5 sm:col-span-1">
                 <Label>Téléphone</Label>
-                <Input type="tel" value={form.organizer_phone} onChange={(e) => handleChange("organizer_phone", e.target.value)} />
+                <Input type="tel" value={form.organizer_phone} readOnly className="bg-muted/50" />
               </div>
             </div>
 
@@ -256,15 +441,16 @@ export default function SubmitEvent() {
               <Input value={form.tags} onChange={(e) => handleChange("tags", e.target.value)} placeholder="formation, jeunesse, emploi" />
             </div>
 
-            <div className="flex justify-end">
-              <Button type="submit" disabled={loading || imageUploading} className="min-w-52">
-                {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                Soumettre mon événement
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+              <div className="flex justify-end">
+                <Button type="submit" disabled={!creatorAccount || loading || imageUploading} className="min-w-52">
+                  {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                  Soumettre mon événement
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

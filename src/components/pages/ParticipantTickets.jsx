@@ -18,6 +18,7 @@ import { fr } from "date-fns/locale";
 import { Loader2, Mail, RefreshCcw, Ticket } from "lucide-react";
 import { toast } from "sonner";
 import { generateTicketPDF } from "@/utils/generateTicket";
+import { trackUserAction } from "@/lib/trackUserAction";
 
 export default function ParticipantTickets() {
   const [emailInput, setEmailInput] = useState(getParticipantEmail());
@@ -53,6 +54,7 @@ export default function ParticipantTickets() {
     setParticipantEmail(normalized);
     setParticipantEmailState(normalized);
     setEmailInput(normalized);
+    trackUserAction({ action: "participant_login", user_email: normalized, context: "participant_tickets" });
     toast.success("Connexion participant réussie");
   };
 
@@ -72,6 +74,14 @@ export default function ParticipantTickets() {
     setTicketLoadingId(registration.id);
     try {
       await generateTicketPDF({ event, registration });
+      trackUserAction({
+        action: "ticket_download",
+        user_email: participantEmail,
+        event_id: registration.event_id,
+        event_title: event.title,
+        event_category: event.category,
+        context: "participant_tickets",
+      });
     } catch {
       toast.error("Impossible de générer le billet.");
     } finally {

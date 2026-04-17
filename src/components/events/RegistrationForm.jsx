@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { generateTicketPDF } from "@/utils/generateTicket";
 import { normalizeParticipantEmail, setParticipantEmail } from "@/lib/participantSession";
+import { trackUserAction } from "@/lib/trackUserAction";
 
 const isGmailEmail = (email) => /@gmail\.com$/i.test((email || "").trim());
 
@@ -197,6 +198,14 @@ export default function RegistrationForm({ event, onSuccess }) {
       if (registrationData.email) {
         setParticipantEmail(registrationData.email);
       }
+      trackUserAction({
+        action: "event_registration_created",
+        user_email: registrationData.email,
+        event_id: event.id,
+        event_title: event.title,
+        event_category: event.category,
+        context: "registration_form",
+      });
       setSuccess(true);
       toast.success("Inscription envoyée avec succès !");
       if (onSuccess) onSuccess();

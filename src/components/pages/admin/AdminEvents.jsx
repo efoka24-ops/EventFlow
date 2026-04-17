@@ -33,6 +33,7 @@ export default function AdminEvents() {
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["admin-events"],
     queryFn: () => base44.entities.Event.list("-created_date"),
+    refetchOnMount: "always",
   });
 
   const handleDelete = async () => {
@@ -65,6 +66,7 @@ export default function AdminEvents() {
               <TableRow>
                 <TableHead>Titre</TableHead>
                 <TableHead>Catégorie</TableHead>
+                <TableHead>Créateur</TableHead>
                 <TableHead>Ville</TableHead>
                 <TableHead>Date</TableHead>
                 <TableHead>Statut</TableHead>
@@ -74,13 +76,13 @@ export default function AdminEvents() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
                     Chargement...
                   </TableCell>
                 </TableRow>
               ) : events.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-10 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-10 text-muted-foreground">
                     Aucun événement
                   </TableCell>
                 </TableRow>
@@ -89,6 +91,12 @@ export default function AdminEvents() {
                   <TableRow key={event.id}>
                     <TableCell className="font-medium max-w-[200px] truncate">{event.title}</TableCell>
                     <TableCell className="text-sm">{getCategoryLabel(event.category)}</TableCell>
+                    <TableCell className="text-xs">
+                      {event.organizer_name || "-"}
+                      {event.organizer_email ? (
+                        <p className="text-muted-foreground truncate max-w-[180px]">{event.organizer_email}</p>
+                      ) : null}
+                    </TableCell>
                     <TableCell className="text-sm">{event.city}</TableCell>
                     <TableCell className="text-sm">
                       {event.date_start && format(new Date(event.date_start), "d MMM yyyy", { locale: fr })}

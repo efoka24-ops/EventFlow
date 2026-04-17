@@ -1,12 +1,14 @@
 import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, CalendarDays, Users, ArrowLeft, CircleHelp } from "lucide-react";
+import { LayoutDashboard, CalendarDays, Users, ArrowLeft, CircleHelp, Activity, UserCog } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
   { label: "Événements", path: "/admin/events", icon: CalendarDays },
   { label: "Inscriptions", path: "/admin/registrations", icon: Users },
+  { label: "Activité utilisateurs", path: "/admin/user-activity", icon: Activity },
+  { label: "Comptes créés", path: "/admin/accounts", icon: UserCog },
   { label: "Aide", path: "/admin/help", icon: CircleHelp },
 ];
 

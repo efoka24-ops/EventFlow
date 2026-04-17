@@ -2,6 +2,10 @@ const STORAGE_KEYS = {
   events: "eventflow_events",
   registrations: "eventflow_registrations",
   helpArticles: "eventflow_help_articles",
+  siteSessions: "eventflow_site_sessions",
+  eventFeedback: "eventflow_event_feedback",
+  userActions: "eventflow_user_actions",
+  creatorAccounts: "eventflow_creator_accounts",
   currentUser: "eventflow_current_user",
 };
 
@@ -14,8 +18,23 @@ const REMOTE_REGISTRATIONS_URL =
   env.VITE_EVENTFLOW_REGISTRATIONS_ENDPOINT ||
   env.VITE_EVENTFLOW_REGISTRATIONS_BLOB_URL ||
   "/storage/registrations";
+const REMOTE_ANALYTICS_URL =
+  env.VITE_EVENTFLOW_ANALYTICS_ENDPOINT ||
+  env.VITE_EVENTFLOW_ANALYTICS_BLOB_URL ||
+  "";
+const REMOTE_FEEDBACK_URL =
+  env.VITE_EVENTFLOW_FEEDBACK_ENDPOINT ||
+  env.VITE_EVENTFLOW_FEEDBACK_BLOB_URL ||
+  "";
+const REMOTE_USER_ACTIONS_URL =
+  env.VITE_EVENTFLOW_USER_ACTIONS_ENDPOINT ||
+  env.VITE_EVENTFLOW_USER_ACTIONS_BLOB_URL ||
+  "";
 const REMOTE_DISABLED = String(env.VITE_EVENTFLOW_REMOTE_DISABLED || "false") === "true";
 const REMOTE_ENABLED = !REMOTE_DISABLED && Boolean(REMOTE_EVENTS_URL && REMOTE_REGISTRATIONS_URL);
+const REMOTE_ANALYTICS_ENABLED = !REMOTE_DISABLED && Boolean(REMOTE_ANALYTICS_URL);
+const REMOTE_FEEDBACK_ENABLED = !REMOTE_DISABLED && Boolean(REMOTE_FEEDBACK_URL);
+const REMOTE_USER_ACTIONS_ENABLED = !REMOTE_DISABLED && Boolean(REMOTE_USER_ACTIONS_URL);
 
 const nowIso = () => new Date().toISOString();
 
@@ -167,6 +186,11 @@ const defaultHelpArticles = [
     updated_date: nowIso(),
   },
 ];
+
+const defaultSiteSessions = [];
+const defaultEventFeedback = [];
+const defaultUserActions = [];
+const defaultCreatorAccounts = [];
 
 const memoryStorage = {
   store: new Map(),
@@ -326,6 +350,81 @@ const ensureHelpArticles = async () => {
   return local;
 };
 
+const ensureSiteSessions = async () => {
+  const local = readStorage(STORAGE_KEYS.siteSessions, defaultSiteSessions);
+  if (!REMOTE_ANALYTICS_ENABLED) {
+    if (!Array.isArray(local)) writeStorage(STORAGE_KEYS.siteSessions, defaultSiteSessions);
+    return Array.isArray(local) ? local : defaultSiteSessions;
+  }
+
+  try {
+    const remote = await readRemoteCollection(REMOTE_ANALYTICS_URL);
+    if (Array.isArray(remote)) {
+      writeStorage(STORAGE_KEYS.siteSessions, remote);
+      return remote;
+    }
+    const seed = Array.isArray(local) ? local : defaultSiteSessions;
+    await writeRemoteCollection(REMOTE_ANALYTICS_URL, seed);
+    writeStorage(STORAGE_KEYS.siteSessions, seed);
+    return seed;
+  } catch {
+    return Array.isArray(local) ? local : defaultSiteSessions;
+  }
+};
+
+const ensureEventFeedback = async () => {
+  const local = readStorage(STORAGE_KEYS.eventFeedback, defaultEventFeedback);
+  if (!REMOTE_FEEDBACK_ENABLED) {
+    if (!Array.isArray(local)) writeStorage(STORAGE_KEYS.eventFeedback, defaultEventFeedback);
+    return Array.isArray(local) ? local : defaultEventFeedback;
+  }
+
+  try {
+    const remote = await readRemoteCollection(REMOTE_FEEDBACK_URL);
+    if (Array.isArray(remote)) {
+      writeStorage(STORAGE_KEYS.eventFeedback, remote);
+      return remote;
+    }
+    const seed = Array.isArray(local) ? local : defaultEventFeedback;
+    await writeRemoteCollection(REMOTE_FEEDBACK_URL, seed);
+    writeStorage(STORAGE_KEYS.eventFeedback, seed);
+    return seed;
+  } catch {
+    return Array.isArray(local) ? local : defaultEventFeedback;
+  }
+};
+
+const ensureUserActions = async () => {
+  const local = readStorage(STORAGE_KEYS.userActions, defaultUserActions);
+  if (!REMOTE_USER_ACTIONS_ENABLED) {
+    if (!Array.isArray(local)) writeStorage(STORAGE_KEYS.userActions, defaultUserActions);
+    return Array.isArray(local) ? local : defaultUserActions;
+  }
+
+  try {
+    const remote = await readRemoteCollection(REMOTE_USER_ACTIONS_URL);
+    if (Array.isArray(remote)) {
+      writeStorage(STORAGE_KEYS.userActions, remote);
+      return remote;
+    }
+    const seed = Array.isArray(local) ? local : defaultUserActions;
+    await writeRemoteCollection(REMOTE_USER_ACTIONS_URL, seed);
+    writeStorage(STORAGE_KEYS.userActions, seed);
+    return seed;
+  } catch {
+    return Array.isArray(local) ? local : defaultUserActions;
+  }
+};
+
+const ensureCreatorAccounts = async () => {
+  const local = readStorage(STORAGE_KEYS.creatorAccounts, defaultCreatorAccounts);
+  if (!Array.isArray(local)) {
+    writeStorage(STORAGE_KEYS.creatorAccounts, defaultCreatorAccounts);
+    return defaultCreatorAccounts;
+  }
+  return local;
+};
+
 const saveEvents = async (events) => {
   writeStorage(STORAGE_KEYS.events, events);
   if (REMOTE_ENABLED) {
@@ -350,6 +449,43 @@ const saveRegistrations = async (registrations) => {
 
 const saveHelpArticles = async (articles) => {
   writeStorage(STORAGE_KEYS.helpArticles, articles);
+};
+
+const saveSiteSessions = async (sessions) => {
+  writeStorage(STORAGE_KEYS.siteSessions, sessions);
+  if (REMOTE_ANALYTICS_ENABLED) {
+    try {
+      await writeRemoteCollection(REMOTE_ANALYTICS_URL, sessions);
+    } catch {
+      // keep local write as fallback
+    }
+  }
+};
+
+const saveEventFeedback = async (feedbackItems) => {
+  writeStorage(STORAGE_KEYS.eventFeedback, feedbackItems);
+  if (REMOTE_FEEDBACK_ENABLED) {
+    try {
+      await writeRemoteCollection(REMOTE_FEEDBACK_URL, feedbackItems);
+    } catch {
+      // keep local write as fallback
+    }
+  }
+};
+
+const saveUserActions = async (actions) => {
+  writeStorage(STORAGE_KEYS.userActions, actions);
+  if (REMOTE_USER_ACTIONS_ENABLED) {
+    try {
+      await writeRemoteCollection(REMOTE_USER_ACTIONS_URL, actions);
+    } catch {
+      // keep local write as fallback
+    }
+  }
+};
+
+const saveCreatorAccounts = async (accounts) => {
+  writeStorage(STORAGE_KEYS.creatorAccounts, accounts);
 };
 
 const eventEntity = {
@@ -468,6 +604,191 @@ const helpArticleEntity = {
   },
 };
 
+const siteSessionEntity = {
+  async list(sort) {
+    return sortItems(await ensureSiteSessions(), sort || "-started_at");
+  },
+  async filter(query, sort, limit) {
+    let result = filterItems(await ensureSiteSessions(), query);
+    result = sortItems(result, sort || "-started_at");
+    if (typeof limit === "number") result = result.slice(0, limit);
+    return result;
+  },
+  async create(data) {
+    const next = { ...data, id: data.id || makeId(), created_date: nowIso(), updated_date: nowIso() };
+    const sessions = await ensureSiteSessions();
+    const updated = [next, ...sessions];
+    await saveSiteSessions(updated);
+    return next;
+  },
+  async update(id, patch) {
+    const sessions = await ensureSiteSessions();
+    const index = sessions.findIndex((session) => session.id === id);
+    if (index === -1) throw new Error("Session not found");
+    const updatedSession = { ...sessions[index], ...patch, updated_date: nowIso() };
+    const next = [...sessions];
+    next[index] = updatedSession;
+    await saveSiteSessions(next);
+    return updatedSession;
+  },
+  async upsertHeartbeat(id, patch = {}) {
+    const sessions = await ensureSiteSessions();
+    const index = sessions.findIndex((session) => session.id === id);
+    const now = nowIso();
+
+    if (index === -1) {
+      const base = {
+        id,
+        started_at: patch.started_at || now,
+        last_seen_at: patch.last_seen_at || now,
+        ended_at: patch.ended_at || null,
+        is_active: patch.is_active !== false,
+        page_paths: patch.page_path ? [patch.page_path] : [],
+        minutes_spent: 0,
+        created_date: now,
+        updated_date: now,
+      };
+      const nextSession = { ...base, ...patch };
+      const updated = [nextSession, ...sessions];
+      await saveSiteSessions(updated);
+      return nextSession;
+    }
+
+    const current = sessions[index];
+    const currentPaths = Array.isArray(current.page_paths) ? current.page_paths : [];
+    const mergedPaths = patch.page_path && !currentPaths.includes(patch.page_path)
+      ? [...currentPaths, patch.page_path]
+      : currentPaths;
+
+    const startedAt = current.started_at || patch.started_at || now;
+    const lastSeenAt = patch.last_seen_at || now;
+    const minutesSpent = Math.max(
+      Number(current.minutes_spent || 0),
+      Math.round((new Date(lastSeenAt).getTime() - new Date(startedAt).getTime()) / 60000)
+    );
+
+    const updatedSession = {
+      ...current,
+      ...patch,
+      started_at: startedAt,
+      last_seen_at: lastSeenAt,
+      page_paths: mergedPaths,
+      minutes_spent: Number.isFinite(minutesSpent) ? minutesSpent : Number(current.minutes_spent || 0),
+      updated_date: now,
+    };
+
+    const next = [...sessions];
+    next[index] = updatedSession;
+    await saveSiteSessions(next);
+    return updatedSession;
+  },
+  async delete(id) {
+    const sessions = await ensureSiteSessions();
+    await saveSiteSessions(sessions.filter((session) => session.id !== id));
+    return { success: true };
+  },
+};
+
+const eventFeedbackEntity = {
+  async list(sort) {
+    return sortItems(await ensureEventFeedback(), sort || "-created_date");
+  },
+  async filter(query, sort, limit) {
+    let result = filterItems(await ensureEventFeedback(), query);
+    result = sortItems(result, sort || "-created_date");
+    if (typeof limit === "number") result = result.slice(0, limit);
+    return result;
+  },
+  async create(data) {
+    const next = { ...data, id: makeId(), created_date: nowIso(), updated_date: nowIso() };
+    const items = await ensureEventFeedback();
+    const updated = [next, ...items];
+    await saveEventFeedback(updated);
+    return next;
+  },
+  async update(id, patch) {
+    const items = await ensureEventFeedback();
+    const index = items.findIndex((item) => item.id === id);
+    if (index === -1) throw new Error("Feedback not found");
+    const updatedItem = { ...items[index], ...patch, updated_date: nowIso() };
+    const next = [...items];
+    next[index] = updatedItem;
+    await saveEventFeedback(next);
+    return updatedItem;
+  },
+  async delete(id) {
+    const items = await ensureEventFeedback();
+    await saveEventFeedback(items.filter((item) => item.id !== id));
+    return { success: true };
+  },
+};
+
+const userActionEntity = {
+  async list(sort) {
+    return sortItems(await ensureUserActions(), sort || "-created_date");
+  },
+  async filter(query, sort, limit) {
+    let result = filterItems(await ensureUserActions(), query);
+    result = sortItems(result, sort || "-created_date");
+    if (typeof limit === "number") result = result.slice(0, limit);
+    return result;
+  },
+  async create(data) {
+    const next = {
+      ...data,
+      id: makeId(),
+      created_date: nowIso(),
+      updated_date: nowIso(),
+    };
+    const actions = await ensureUserActions();
+    const updated = [next, ...actions].slice(0, 10000);
+    await saveUserActions(updated);
+    return next;
+  },
+  async delete(id) {
+    const actions = await ensureUserActions();
+    await saveUserActions(actions.filter((item) => item.id !== id));
+    return { success: true };
+  },
+};
+
+const creatorAccountEntity = {
+  async list(sort) {
+    return sortItems(await ensureCreatorAccounts(), sort || "-created_date");
+  },
+  async filter(query, sort, limit) {
+    let result = filterItems(await ensureCreatorAccounts(), query);
+    result = sortItems(result, sort || "-created_date");
+    if (typeof limit === "number") result = result.slice(0, limit);
+    return result;
+  },
+  async create(data) {
+    const accounts = await ensureCreatorAccounts();
+    const email = String(data.email || "").trim().toLowerCase();
+    const phone = String(data.phone || "").trim();
+
+    if (email && accounts.some((item) => item.email === email)) {
+      throw new Error("Email already used");
+    }
+    if (phone && accounts.some((item) => item.phone === phone)) {
+      throw new Error("Phone already used");
+    }
+
+    const next = {
+      ...data,
+      email,
+      phone,
+      id: makeId(),
+      created_date: nowIso(),
+      updated_date: nowIso(),
+    };
+
+    const updated = [next, ...accounts];
+    await saveCreatorAccounts(updated);
+    return next;
+  },
+};
+
 const auth = {
   async me() {
     const user = readStorage(STORAGE_KEYS.currentUser, null);
@@ -561,6 +882,10 @@ export const base44 = {
     Event: eventEntity,
     Registration: registrationEntity,
     HelpArticle: helpArticleEntity,
+    SiteSession: siteSessionEntity,
+    EventFeedback: eventFeedbackEntity,
+    UserAction: userActionEntity,
+    CreatorAccount: creatorAccountEntity,
   },
   integrations,
 };

@@ -11,6 +11,7 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { getCategoryLabel } from "@/lib/constants";
 import RegistrationForm from "@/components/events/RegistrationForm";
+import EventFeedbackForm from "@/components/events/EventFeedbackForm";
 import { motion } from "framer-motion";
 
 const defaultImages = {
@@ -158,6 +159,10 @@ export default function EventDetail() {
                 ))}
               </div>
             )}
+
+            <div className="pt-4">
+              <EventFeedbackForm event={event} />
+            </div>
           </div>
         </motion.div>
 
