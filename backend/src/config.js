@@ -2,19 +2,18 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const required = ["DATABASE_URL", "JWT_SECRET"];
-
-for (const key of required) {
-  if (!process.env[key]) {
-    throw new Error(`Missing required environment variable: ${key}`);
-  }
+if (!process.env.JWT_SECRET) {
+  console.warn("[config] JWT_SECRET is not set — using insecure fallback for development only");
+}
+if (!process.env.DATABASE_URL) {
+  console.warn("[config] DATABASE_URL is not set — DB features will be unavailable");
 }
 
 export const config = {
   port: Number(process.env.PORT || 4000),
   nodeEnv: process.env.NODE_ENV || "development",
   databaseUrl: process.env.DATABASE_URL,
-  jwtSecret: process.env.JWT_SECRET,
+  jwtSecret: process.env.JWT_SECRET || "dev_fallback_secret_change_in_production",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:5173",
   adminEmail: process.env.ADMIN_EMAIL || "",

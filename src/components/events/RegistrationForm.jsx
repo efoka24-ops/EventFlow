@@ -148,8 +148,6 @@ export default function RegistrationForm({ event, onSuccess }) {
     phone: "",
     gender: "",
     age: "",
-    id_type: "",
-    id_number: "",
   });
 
   useEffect(() => {
@@ -253,8 +251,6 @@ export default function RegistrationForm({ event, onSuccess }) {
         phone: formData.phone || undefined,
         gender: formData.gender || undefined,
         age: formData.age ? Number(formData.age) : undefined,
-        id_type: formData.id_type || undefined,
-        id_number: formData.id_number || undefined,
         geo_latitude: geo.latitude,
         geo_longitude: geo.longitude,
         geo_accuracy: geo.accuracy,
@@ -560,22 +556,6 @@ export default function RegistrationForm({ event, onSuccess }) {
                   <Label>Âge</Label>
                   <Input type="number" value={formData.age} onChange={(e) => handleChange("age", e.target.value)} />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Type de pièce d'identité</Label>
-                  <Select value={formData.id_type} onValueChange={(v) => handleChange("id_type", v)}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="cni">CNI</SelectItem>
-                      <SelectItem value="passeport">Passeport</SelectItem>
-                      <SelectItem value="permis">Permis de conduire</SelectItem>
-                      <SelectItem value="autre">Autre</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Numéro de pièce d'identité</Label>
-                <Input value={formData.id_number} onChange={(e) => handleChange("id_number", e.target.value)} />
               </div>
             </div>
           )}
