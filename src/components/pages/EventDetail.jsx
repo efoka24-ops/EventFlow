@@ -31,6 +31,7 @@ export default function EventDetail() {
       const events = await base44.entities.Event.filter({ id });
       return events[0];
     },
+    refetchOnMount: "always",
   });
 
   if (isLoading) {

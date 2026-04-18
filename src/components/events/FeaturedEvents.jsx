@@ -8,6 +8,7 @@ export default function FeaturedEvents() {
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["featured-events"],
     queryFn: () => base44.entities.Event.filter({ status: "publie" }, "-created_date", 6),
+    refetchOnMount: "always",
   });
 
   return (

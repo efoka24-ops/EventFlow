@@ -37,8 +37,18 @@ export default function AdminEvents() {
   });
 
   const handleDelete = async () => {
-    await base44.entities.Event.delete(deleteId);
+    const deletedEventId = deleteId;
+    await base44.entities.Event.delete(deletedEventId);
+
+    // Ensure all event-related screens reflect deletion immediately.
+    queryClient.setQueryData(["admin-events"], (prev = []) => prev.filter((item) => item.id !== deletedEventId));
+    queryClient.setQueryData(["events"], (prev = []) => prev.filter((item) => item.id !== deletedEventId));
+    queryClient.setQueryData(["featured-events"], (prev = []) => prev.filter((item) => item.id !== deletedEventId));
+    queryClient.removeQueries({ queryKey: ["event", deletedEventId], exact: true });
+
     queryClient.invalidateQueries({ queryKey: ["admin-events"] });
+    queryClient.invalidateQueries({ queryKey: ["events"] });
+    queryClient.invalidateQueries({ queryKey: ["featured-events"] });
     toast.success("Événement supprimé");
     setDeleteId(null);
   };
