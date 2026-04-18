@@ -14,6 +14,8 @@ Ce dossier contient le schéma SQL complet du projet.
 - `site_sessions`
 - `event_feedback`
 - `user_actions`
+- `payments`
+- `payment_events`
 - `creator_accounts`
 
 ## Exécution

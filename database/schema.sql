@@ -259,6 +259,66 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_date();
 
 -- =========================================================
+-- PAYMENTS (CamPay)
+-- =========================================================
+CREATE TABLE IF NOT EXISTS payments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  registration_id uuid REFERENCES registrations(id) ON DELETE SET NULL,
+  event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+
+  provider text NOT NULL DEFAULT 'campay',
+  endpoint text NOT NULL CHECK (endpoint IN ('collect', 'payment_link')),
+
+  amount integer NOT NULL CHECK (amount > 0),
+  currency text NOT NULL DEFAULT 'XAF',
+  phone_number text,
+  description text,
+
+  external_reference uuid NOT NULL,
+  campay_reference uuid,
+
+  status_local text NOT NULL CHECK (status_local IN ('initiated', 'pending', 'successful', 'failed')),
+  status_provider text,
+  provider_code text,
+  provider_reason text,
+
+  operator text,
+  operator_reference text,
+  ussd_code text,
+  payment_link text,
+
+  provider_response jsonb,
+  paid_at timestamptz,
+
+  created_date timestamptz NOT NULL DEFAULT NOW(),
+  updated_date timestamptz NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_external_reference ON payments (external_reference);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_campay_reference ON payments (campay_reference) WHERE campay_reference IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_payments_event_id ON payments (event_id);
+CREATE INDEX IF NOT EXISTS idx_payments_registration_id ON payments (registration_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status_local ON payments (status_local);
+CREATE INDEX IF NOT EXISTS idx_payments_created_date ON payments (created_date DESC);
+
+CREATE TRIGGER trg_payments_updated_date
+BEFORE UPDATE ON payments
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_date();
+
+CREATE TABLE IF NOT EXISTS payment_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  payment_id uuid NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+  source text NOT NULL,
+  event_type text,
+  payload jsonb,
+  created_date timestamptz NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_payment_events_payment_id ON payment_events (payment_id);
+CREATE INDEX IF NOT EXISTS idx_payment_events_created_date ON payment_events (created_date DESC);
+
+-- =========================================================
 -- CREATOR ACCOUNTS
 -- =========================================================
 CREATE TABLE IF NOT EXISTS creator_accounts (
