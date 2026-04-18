@@ -117,14 +117,21 @@ export default function RegistrationForm({ event, onSuccess }) {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Erreur paiement");
+      if (!res.ok) {
+        throw new Error(data.error || data.message || "Erreur paiement");
+      }
       const pid = data.payment?.id ?? data.id;
       setPaymentId(pid);
       setPaymentStatus("pending");
       toast.info("Vérifiez votre téléphone pour valider le paiement MoMo.");
       startPolling(pid);
     } catch (err) {
-      toast.error(err.message || "Impossible de lancer le paiement.");
+      const message = err?.message || "Impossible de lancer le paiement.";
+      if (message.toLowerCase().includes("maximum amount is")) {
+        toast.error("CamPay démo limite les tests à 25 XAF max. Réduisez le prix de test ou passez en production.");
+      } else {
+        toast.error(message);
+      }
     } finally {
       setPaymentLoading(false);
     }

@@ -14,10 +14,19 @@ const campayFetch = async (path, options = {}) => {
   });
 
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
 
   if (!response.ok) {
     const message = data?.message || data?.error || `CamPay error (${response.status})`;
+    // CamPay demo environment has strict amount limits; expose as a functional 400
+    if (String(message).toLowerCase().includes("maximum amount is")) {
+      throw httpError(400, message);
+    }
     throw httpError(502, message);
   }
 
