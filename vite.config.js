@@ -10,12 +10,12 @@ export default defineConfig({
       '/storage/events': {
         target: 'https://jsonblob.com',
         changeOrigin: true,
-        rewrite: () => '/api/jsonBlob/019d9725-a658-795a-9147-e17fd51f5207',
+        rewrite: () => '/api/jsonBlob/019d9ff9-b1f7-7842-82b4-f09c06db506c',
       },
       '/storage/registrations': {
         target: 'https://jsonblob.com',
         changeOrigin: true,
-        rewrite: () => '/api/jsonBlob/019d9725-aa52-7c74-9281-2ce60fe6471f',
+        rewrite: () => '/api/jsonBlob/019d9ffa-ce4b-756e-94a4-de4a31a8e47a',
       },
     },
   },

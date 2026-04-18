@@ -2,11 +2,11 @@
   "rewrites": [
     {
       "source": "/storage/events",
-      "destination": "https://jsonblob.com/api/jsonBlob/019d9725-a658-795a-9147-e17fd51f5207"
+      "destination": "https://jsonblob.com/api/jsonBlob/019d9ff9-b1f7-7842-82b4-f09c06db506c"
     },
     {
       "source": "/storage/registrations",
-      "destination": "https://jsonblob.com/api/jsonBlob/019d9725-aa52-7c74-9281-2ce60fe6471f"
+      "destination": "https://jsonblob.com/api/jsonBlob/019d9ffa-ce4b-756e-94a4-de4a31a8e47a"
     },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
