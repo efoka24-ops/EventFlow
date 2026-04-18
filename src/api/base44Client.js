@@ -306,7 +306,7 @@ const ensureEvents = async () => {
 
   try {
     const remote = await readRemoteCollection(REMOTE_EVENTS_URL);
-    if (Array.isArray(remote) && remote.length > 0) {
+    if (Array.isArray(remote)) {
       writeStorage(STORAGE_KEYS.events, remote);
       return remote;
     }
