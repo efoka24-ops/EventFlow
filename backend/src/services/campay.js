@@ -23,9 +23,25 @@ const campayFetch = async (path, options = {}) => {
 
   if (!response.ok) {
     const message = data?.message || data?.error || `CamPay error (${response.status})`;
+    const normalizedMessage = String(message || "").toLowerCase();
     // CamPay demo environment has strict amount limits; expose as a functional 400
-    if (String(message).toLowerCase().includes("maximum amount is")) {
+    if (
+      normalizedMessage.includes("maximum amount is") ||
+      normalizedMessage.includes("demo system") ||
+      normalizedMessage.includes("25.00 xaf")
+    ) {
       throw httpError(400, message);
+    }
+    // Orange Money not supported by this CamPay account / demo
+    if (
+      normalizedMessage.includes("operator not supported") ||
+      normalizedMessage.includes("not supported") ||
+      normalizedMessage.includes("orange") ||
+      normalizedMessage.includes("invalid phone") ||
+      normalizedMessage.includes("unsupported operator") ||
+      normalizedMessage.includes("could not determine operator")
+    ) {
+      throw httpError(400, "Opérateur non supporté : seul MTN MoMo est disponible pour ce compte CamPay. Utilisez un numéro MTN (67X / 65X).");
     }
     throw httpError(502, message);
   }

@@ -22,6 +22,16 @@ const detectEmailProvider = (email) => {
   return normalized.split("@")[1] || null;
 };
 
+const normalizePriceAmount = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) return numeric;
+  const digitsOnly = raw.replace(/\D/g, "");
+  return digitsOnly ? Number(digitsOnly) : 0;
+};
+
 const reverseGeocode = async (latitude, longitude) => {
   const response = await fetch(
     `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
@@ -46,6 +56,34 @@ const reverseGeocode = async (latitude, longitude) => {
   };
 };
 
+const collectPaymentWithFallback = async (payload) => {
+  const endpoints = ["/api/payments/collect", "http://localhost:3001/api/payments/collect"];
+  let lastResponse = null;
+
+  for (let i = 0; i < endpoints.length; i += 1) {
+    const url = endpoints[i];
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      // Retry on direct backend URL when proxy returns gateway-level errors.
+      if ((response.status === 502 || response.status === 503 || response.status === 504) && i < endpoints.length - 1) {
+        lastResponse = response;
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      if (i === endpoints.length - 1) throw error;
+    }
+  }
+
+  return lastResponse;
+};
+
 export default function RegistrationForm({ event, onSuccess }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userLoading, setUserLoading] = useState(true);
@@ -56,12 +94,14 @@ export default function RegistrationForm({ event, onSuccess }) {
   const [ticketLoading, setTicketLoading] = useState(false);
 
   // Payment state
-  const isPaidEvent = event?.price > 0;
+  const paymentAmount = normalizePriceAmount(event?.price);
+  const isPaidEvent = paymentAmount > 0;
   const [paymentStep, setPaymentStep] = useState(false); // show payment panel
   const [paymentId, setPaymentId] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState(null); // 'pending'|'successful'|'failed'
   const [paymentPhone, setPaymentPhone] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentMeta, setPaymentMeta] = useState(null); // campay_reference, operator, paid_at
   const pollRef = useRef(null);
 
   const stopPolling = () => {
@@ -84,6 +124,11 @@ export default function RegistrationForm({ event, onSuccess }) {
         setPaymentStatus(status);
         if (status === "successful") {
           stopPolling();
+          setPaymentMeta({
+            campay_reference: data.payment?.campay_reference || null,
+            operator: data.payment?.operator || null,
+            paid_at: data.payment?.paid_at || new Date().toISOString(),
+          });
           toast.success("Paiement confirmé ! Inscription validée.");
           setSuccess(true);
           if (onSuccess) onSuccess();
@@ -103,20 +148,57 @@ export default function RegistrationForm({ event, onSuccess }) {
       toast.error("Entrez votre numéro de téléphone MoMo.");
       return;
     }
+
+    // CamPay demo sandbox rejects amounts above 25 XAF.
+    if (paymentAmount > 25) {
+      toast.error("Mode démo CamPay: montant max 25 XAF. Baissez le prix pour tester.");
+      return;
+    }
+
     setPaymentLoading(true);
     try {
-      const res = await fetch("/api/payments/collect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          registration_id: savedRegistration?.id,
-          event_id: event.id,
-          amount: event.price,
-          phone_number: phone,
-          description: `Inscription – ${event.title}`,
-        }),
+      // Detect Orange Money numbers (69X) — not supported by CamPay demo
+      const digits = phone.replace(/\D/g, "");
+      const isOrange = digits.startsWith("69") || (digits.startsWith("23769"));
+      if (isOrange) {
+        toast.error("Orange Money n'est pas supporté par ce compte CamPay. Utilisez un numéro MTN (67X ou 65X).");
+        setPaymentLoading(false);
+        return;
+      }
+
+      const payerName = [formData.first_name, formData.last_name].filter(Boolean).join(" ") || null;
+      const geoPayload = (!geo.loading && geo.latitude) ? {
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+        city: geo.city || null,
+        region: geo.region || null,
+        country: geo.country || null,
+      } : null;
+      const deviceInfo = navigator.userAgent?.substring(0, 500) || null;
+
+      const res = await collectPaymentWithFallback({
+        registration_id: savedRegistration?.id,
+        event_id: event.id,
+        amount: paymentAmount,
+        phone_number: phone,
+        description: `Inscription – ${event.title}`,
+        payer_name: payerName,
+        geolocation: geoPayload,
+        device_info: deviceInfo,
       });
-      const data = await res.json();
+
+      if (!res) {
+        throw new Error("Service paiement indisponible (proxy et backend injoignables)");
+      }
+
+      const raw = await res.text();
+      let data = {};
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        data = { error: raw || "Erreur paiement" };
+      }
+
       if (!res.ok) {
         throw new Error(data.error || data.message || "Erreur paiement");
       }
@@ -291,7 +373,7 @@ export default function RegistrationForm({ event, onSuccess }) {
         // Pre-fill payment phone from form
         setPaymentPhone(formData.phone || "");
         setPaymentStep(true);
-        toast.info(`Événement payant — ${event.price.toLocaleString()} FCFA. Procédez au paiement.`);
+        toast.info(`Événement payant — ${paymentAmount.toLocaleString()} FCFA. Procédez au paiement.`);
       } else {
         setSuccess(true);
         toast.success("Inscription envoyée avec succès !");
@@ -322,7 +404,7 @@ export default function RegistrationForm({ event, onSuccess }) {
             <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-1">
               <p className="text-sm text-muted-foreground">Événement</p>
               <p className="font-semibold">{event.title}</p>
-              <p className="text-lg font-bold text-primary">{event.price?.toLocaleString()} FCFA</p>
+              <p className="text-lg font-bold text-primary">{paymentAmount.toLocaleString()} FCFA</p>
             </div>
 
             {paymentStatus === null && (
@@ -345,20 +427,21 @@ export default function RegistrationForm({ event, onSuccess }) {
               </div>
             )}
 
-            {paymentStatus === "pending" && (
+            {(paymentStatus === "pending" || paymentStatus === "initiated") && (
               <div className="flex flex-col items-center gap-4 py-4">
                 <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
                   <Clock className="w-8 h-8 text-amber-600 animate-pulse" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="font-semibold">En attente de confirmation</p>
+                  <p className="font-semibold">Confirmez le paiement sur votre téléphone</p>
                   <p className="text-sm text-muted-foreground">
-                    Une demande a été envoyée au <strong>{paymentPhone}</strong>.<br />
-                    Approuvez-la sur votre téléphone.
+                    Une notification MoMo a été envoyée au <strong>{paymentPhone}</strong>.<br />
+                    Ouvrez votre application Mobile Money et <strong>validez la demande</strong>.<br />
+                    <span className="text-amber-600">Si vous ne la recevez pas dans 1 minute, vérifiez vos notifications ou recomposez le <strong>#150#</strong> (MTN) / <strong>#150*4#</strong> (Orange).</span>
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Vérification en cours…
+                  <Loader2 className="w-3 h-3 animate-spin" /> En attente de votre validation…
                 </Badge>
               </div>
             )}
@@ -389,7 +472,7 @@ export default function RegistrationForm({ event, onSuccess }) {
     const handleDownloadTicket = async () => {
       setTicketLoading(true);
       try {
-        await generateTicketPDF({ event, registration: savedRegistration || formData });
+        await generateTicketPDF({ event, registration: savedRegistration || formData, payment: paymentMeta });
       } catch {
         toast.error("Impossible de générer le billet. Réessayez.");
       } finally {
@@ -572,7 +655,7 @@ export default function RegistrationForm({ event, onSuccess }) {
             {loading
               ? "Inscription en cours..."
               : isPaidEvent
-              ? `S'inscrire et payer (${event.price?.toLocaleString()} FCFA)`
+                ? `S'inscrire et payer (${paymentAmount.toLocaleString()} FCFA)`
               : "S'inscrire"}
           </Button>
         </form>

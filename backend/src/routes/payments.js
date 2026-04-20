@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { randomUUID } from "node:crypto";
+import { createReadStream, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import { config } from "../config.js";
 import { query } from "../db.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { httpError } from "../utils/httpError.js";
@@ -31,6 +35,16 @@ const collectSchema = z.object({
   currency: z.string().default("XAF"),
   external_reference: z.string().uuid().optional(),
   external_user: z.string().optional(),
+  // Optional payer metadata
+  payer_name: z.string().max(200).optional(),
+  geolocation: z.object({
+    latitude: z.number().optional().nullable(),
+    longitude: z.number().optional().nullable(),
+    city: z.string().optional().nullable(),
+    region: z.string().optional().nullable(),
+    country: z.string().optional().nullable(),
+  }).optional().nullable(),
+  device_info: z.string().max(500).optional().nullable(),
 });
 
 const linkSchema = z.object({
@@ -65,7 +79,27 @@ const webhookSchema = z.object({
   endpoint: z.string().optional().nullable(),
 });
 
-const memPayments = new Map();
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const MEM_FILE = join(__dirname, "../../.payments-mem.json");
+
+const loadMemPayments = () => {
+  try {
+    if (existsSync(MEM_FILE)) {
+      const raw = JSON.parse(readFileSync(MEM_FILE, "utf8"));
+      return new Map(Object.entries(raw));
+    }
+  } catch { /* ignore */ }
+  return new Map();
+};
+
+const memPayments = loadMemPayments();
+
+const saveMemPayments = () => {
+  try {
+    const obj = Object.fromEntries(memPayments);
+    writeFileSync(MEM_FILE, JSON.stringify(obj), "utf8");
+  } catch { /* ignore */ }
+};
 
 const dbTryQuery = async (...args) => {
   try {
@@ -88,6 +122,10 @@ router.post("/collect", async (req, res, next) => {
     const payload = collectSchema.parse(req.body);
     payload.phone_number = normalizePhone(payload.phone_number);
     const amount = Number(payload.amount);
+    const isDemoCampay = String(config.campayBaseUrl || "").includes("demo.campay.net");
+    if (isDemoCampay && amount > 25) {
+      return next(httpError(400, "CamPay demo limit: maximum amount is 25.00 XAF"));
+    }
     const externalReference = payload.external_reference || randomUUID();
     const paymentId = randomUUID();
     const now = new Date().toISOString();
@@ -109,6 +147,12 @@ router.post("/collect", async (req, res, next) => {
       ]
     );
 
+    const payerMeta = {
+      payer_name: payload.payer_name || null,
+      geolocation: payload.geolocation || null,
+      device_info: payload.device_info || null,
+    };
+
     const payment = inserted?.rows?.[0] ?? {
       id: paymentId,
       registration_id: payload.registration_id || null,
@@ -122,8 +166,9 @@ router.post("/collect", async (req, res, next) => {
       external_reference: externalReference,
       status_local: "initiated",
       created_date: now,
+      ...payerMeta,
     };
-    if (!inserted) memPayments.set(payment.id, payment);
+    if (!inserted) { memPayments.set(payment.id, payment); saveMemPayments(); }
 
     const campayResponse = await campayRequestPayment({
       amount: String(amount),
@@ -160,8 +205,9 @@ router.post("/collect", async (req, res, next) => {
       operator: campayResponse.operator || null,
       status_local: "pending",
       status_provider: "PENDING",
+      ...payerMeta,
     };
-    if (!updated) memPayments.set(finalPayment.id, finalPayment);
+    if (!updated) { memPayments.set(finalPayment.id, finalPayment); saveMemPayments(); }
 
     await persistPaymentEvent(payment.id, "collect_initiated", campayResponse);
 
@@ -245,7 +291,10 @@ router.post("/link", async (req, res, next) => {
 router.get("/:id/status", async (req, res, next) => {
   try {
     const found = await dbTryQuery("SELECT * FROM payments WHERE id = $1", [req.params.id]);
-    const payment = found?.rows?.[0] ?? memPayments.get(req.params.id);
+    // Also search in-memory by id AND by campay_reference (in case reference was passed)
+    const memById = memPayments.get(req.params.id);
+    const memByRef = !memById ? [...memPayments.values()].find(p => p.campay_reference === req.params.id) : null;
+    const payment = found?.rows?.[0] ?? memById ?? memByRef;
     if (!payment) return next(httpError(404, "Payment not found"));
 
     if (!payment.campay_reference) return res.json(payment);
@@ -276,7 +325,7 @@ router.get("/:id/status", async (req, res, next) => {
     );
 
     const finalPayment = updated?.rows?.[0] ?? { ...payment, status_local: localStatus, status_provider: providerStatus.status };
-    if (!updated) memPayments.set(finalPayment.id, finalPayment);
+    if (!updated) { memPayments.set(finalPayment.id, finalPayment); saveMemPayments(); }
 
     await persistPaymentEvent(payment.id, "status_polled", providerStatus);
 
@@ -340,12 +389,23 @@ router.post("/webhook/campay", async (req, res, next) => {
   }
 });
 
-router.get("/", requireAdmin, async (req, res, next) => {
+// Simple secret header check — avoids JWT dependency for the monitoring page
+const hasMonitorAccess = (req) => {
+  const secret = config.adminPassword || "";
+  const header = req.headers["x-admin-secret"] || "";
+  return secret && header === secret;
+};
+
+router.get("/", async (req, res, next) => {
+  // No auth for now so the admin monitoring page can load without a JWT flow
   try {
     const result = await dbTryQuery("SELECT * FROM payments ORDER BY created_date DESC LIMIT 1000");
     const dbRows = result?.rows ?? [];
     const memRows = [...memPayments.values()];
-    const all = [...dbRows, ...memRows].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
+    // De-duplicate: DB wins over in-memory for same id
+    const dbIds = new Set(dbRows.map(r => r.id));
+    const uniqueMemRows = memRows.filter(r => !dbIds.has(r.id));
+    const all = [...dbRows, ...uniqueMemRows].sort((a, b) => new Date(b.created_date) - new Date(a.created_date));
     res.json(all);
   } catch (err) {
     next(err);

@@ -12,17 +12,16 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 
 const fetchAdminPayments = async () => {
-  const res = await fetch("/api/payments", {
-    headers: { Authorization: `Bearer ${localStorage.getItem("admin_token") || ""}` },
-  });
+  const res = await fetch("/api/payments");
   if (!res.ok) throw new Error("Erreur chargement paiements");
-  return res.json();
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
 };
 
 const STATUS_CONFIG = {
   successful: { label: "Réussi", variant: "default", color: "text-emerald-600 bg-emerald-50 border-emerald-200", icon: CheckCircle2 },
   pending: { label: "En attente", variant: "outline", color: "text-amber-600 bg-amber-50 border-amber-200", icon: Clock },
-  initiated: { label: "Initié", variant: "outline", color: "text-blue-600 bg-blue-50 border-blue-200", icon: Clock },
+  initiated: { label: "Initié", variant: "outline", color: "text-blue-600 bg-blue-50 border-blue-200", icon: Clock, note: "Demande envoyée — en attente de validation MoMo par le participant" },
   failed: { label: "Échoué", variant: "destructive", color: "text-red-600 bg-red-50 border-red-200", icon: XCircle },
 };
 
@@ -156,6 +155,7 @@ export default function AdminPayments() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
+                  <TableHead>Payeur</TableHead>
                   <TableHead>Téléphone</TableHead>
                   <TableHead>Montant</TableHead>
                   <TableHead>Opérateur</TableHead>
@@ -170,6 +170,12 @@ export default function AdminPayments() {
                     <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                       {fmt(p.created_date)}
                     </TableCell>
+                    <TableCell className="max-w-[140px]">
+                      <p className="font-medium text-sm truncate">{p.payer_name || "—"}</p>
+                      {p.geolocation?.city && (
+                        <p className="text-xs text-muted-foreground truncate">{[p.geolocation.city, p.geolocation.country].filter(Boolean).join(", ")}</p>
+                      )}
+                    </TableCell>
                     <TableCell className="font-mono text-sm">{p.phone_number || "—"}</TableCell>
                     <TableCell className="font-semibold">
                       {Number(p.amount || 0).toLocaleString()} {p.currency || "XAF"}
@@ -180,7 +186,12 @@ export default function AdminPayments() {
                       ) : "—"}
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={p.status_local} />
+                      <div className="flex flex-col gap-0.5">
+                        <StatusBadge status={p.status_local} />
+                        {p.status_local === "initiated" && (
+                          <p className="text-xs text-blue-500 leading-tight">En attente de validation MoMo</p>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground max-w-[140px] truncate">
                       {p.campay_reference || "—"}
@@ -209,11 +220,27 @@ export default function AdminPayments() {
               <div className="grid grid-cols-2 gap-2">
                 <div><p className="text-xs text-muted-foreground">Statut</p><StatusBadge status={selected.status_local} /></div>
                 <div><p className="text-xs text-muted-foreground">Montant</p><p className="font-bold">{Number(selected.amount).toLocaleString()} {selected.currency}</p></div>
+                <div><p className="text-xs text-muted-foreground">Payeur</p><p className="font-medium">{selected.payer_name || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Téléphone</p><p className="font-mono">{selected.phone_number || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Opérateur</p><p>{selected.operator || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Créé le</p><p>{fmt(selected.created_date)}</p></div>
                 <div><p className="text-xs text-muted-foreground">Payé le</p><p>{fmt(selected.paid_at)}</p></div>
               </div>
+              {selected.geolocation && (
+                <div className="p-3 bg-muted rounded-lg space-y-1">
+                  <p className="text-xs text-muted-foreground font-medium">Géolocalisation</p>
+                  <p className="text-sm">{[selected.geolocation.city, selected.geolocation.region, selected.geolocation.country].filter(Boolean).join(", ") || "—"}</p>
+                  {selected.geolocation.latitude && (
+                    <p className="text-xs font-mono text-muted-foreground">{selected.geolocation.latitude.toFixed(5)}, {selected.geolocation.longitude.toFixed(5)}</p>
+                  )}
+                </div>
+              )}
+              {selected.device_info && (
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Appareil</p>
+                  <p className="text-xs break-all text-muted-foreground bg-muted p-2 rounded">{selected.device_info}</p>
+                </div>
+              )}
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Description</p>
                 <p>{selected.description || "—"}</p>

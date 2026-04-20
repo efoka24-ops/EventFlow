@@ -45,7 +45,7 @@ const fitTitleLines = (doc, text, maxWidth) => {
   return { lines, fontSize: 10 };
 };
 
-export async function generateTicketPDF({ event, registration }) {
+export async function generateTicketPDF({ event, registration, payment = null }) {
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pageW = 210;
   const margin = 16;
@@ -68,7 +68,8 @@ export async function generateTicketPDF({ event, registration }) {
 
   // ── Ticket card border ────────────────────────────────────────────────────
   const cardTop = 30;
-  const cardH = 130;
+  const hasPayment = payment && (payment.campay_reference || payment.operator || payment.paid_at);
+  const cardH = hasPayment ? 165 : 130;
   doc.setDrawColor(220, 220, 220);
   doc.setLineWidth(0.4);
   doc.roundedRect(margin, cardTop, contentW, cardH, 4, 4, "S");
@@ -129,6 +130,40 @@ export async function generateTicketPDF({ event, registration }) {
   doc.setFont("helvetica", "normal");
   doc.setTextColor(90, 90, 90);
   doc.text(`Statut du billet: ${registrationStatus}`, margin + 6, infoY + 44);
+
+  // ── Payment info block ────────────────────────────────────────────────────
+  let afterParticipantY = infoY + 48;
+  if (payment && (payment.campay_reference || payment.operator || payment.paid_at)) {
+    const paidDate = payment.paid_at ? new Date(payment.paid_at) : null;
+    const paidDateStr = paidDate
+      ? paidDate.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "Africa/Douala" })
+      : "";
+    const paidTimeStr = paidDate
+      ? paidDate.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", timeZone: "Africa/Douala" })
+      : "";
+
+    // separator line
+    doc.setDrawColor(220, 220, 220);
+    doc.setLineWidth(0.3);
+    doc.line(margin + 6, afterParticipantY, pageW - margin - 6, afterParticipantY);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text("Détail du paiement", margin + 6, afterParticipantY + 7);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9);
+    doc.setTextColor(30, 30, 30);
+    const payLines = [];
+    if (payment.campay_reference) payLines.push(`N° paiement : ${payment.campay_reference}`);
+    if (paidDateStr) payLines.push(`Date : ${paidDateStr}  |  Heure : ${paidTimeStr}`);
+    if (payment.operator) payLines.push(`Opérateur : ${payment.operator}`);
+    payLines.forEach((line, i) => {
+      doc.text(line, margin + 6, afterParticipantY + 14 + i * 6);
+    });
+    afterParticipantY += 14 + payLines.length * 6 + 4;
+  }
 
   // ── QR Code ───────────────────────────────────────────────────────────────
   const qrData = JSON.stringify({
