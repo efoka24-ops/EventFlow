@@ -1,0 +1,6 @@
+services:
+  eventflow:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-trugroup}/eventflow:${EVENTFLOW_TAG:-latest}
+    ports:
+      - "8080:80"
+    restart: unless-stopped

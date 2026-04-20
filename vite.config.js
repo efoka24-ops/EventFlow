@@ -17,6 +17,10 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: () => '/api/jsonBlob/019d9ffa-ce4b-756e-94a4-de4a31a8e47a',
       },
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+      },
     },
   },
   resolve: {

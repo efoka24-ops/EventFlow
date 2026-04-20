@@ -20,6 +20,7 @@ import AdminRegistrations from '@/components/pages/admin/AdminRegistrations';
 import AdminHelp from '@/components/pages/admin/AdminHelp';
 import AdminUserActivity from '@/components/pages/admin/AdminUserActivity';
 import AdminAccounts from '@/components/pages/admin/AdminAccounts';
+import AdminPayments from '@/components/pages/admin/AdminPayments';
 import SiteAnalyticsTracker from '@/components/analytics/SiteAnalyticsTracker';
 
 const isAdminUser = (user) => {
@@ -73,6 +74,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin" element={<Dashboard />} />
           <Route path="/admin/events" element={<AdminEvents />} />
           <Route path="/admin/registrations" element={<AdminRegistrations />} />
+          <Route path="/admin/payments" element={<AdminPayments />} />
           <Route path="/admin/user-activity" element={<AdminUserActivity />} />
           <Route path="/admin/accounts" element={<AdminAccounts />} />
           <Route path="/admin/help" element={<AdminHelp />} />
