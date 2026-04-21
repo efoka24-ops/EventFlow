@@ -616,12 +616,26 @@ const siteSessionEntity = {
   },
   async create(data) {
     const next = { ...data, id: data.id || makeId(), created_date: nowIso(), updated_date: nowIso() };
+    if (REMOTE_ENABLED) {
+      try {
+        await fetchJson(`${REMOTE_ANALYTICS_URL}/${next.id}/heartbeat`, { method: "PUT", body: JSON.stringify(next) });
+      } catch (err) {
+        console.warn("Failed to create remote session:", err);
+      }
+    }
     const sessions = await ensureSiteSessions();
     const updated = [next, ...sessions];
     await saveSiteSessions(updated);
     return next;
   },
   async update(id, patch) {
+    if (REMOTE_ENABLED) {
+      try {
+        await fetchJson(`${REMOTE_ANALYTICS_URL}/${id}/heartbeat`, { method: "PUT", body: JSON.stringify(patch) });
+      } catch (err) {
+        console.warn("Failed to update remote session:", err);
+      }
+    }
     const sessions = await ensureSiteSessions();
     const index = sessions.findIndex((session) => session.id === id);
     if (index === -1) throw new Error("Session not found");
@@ -632,6 +646,24 @@ const siteSessionEntity = {
     return updatedSession;
   },
   async upsertHeartbeat(id, patch = {}) {
+    if (REMOTE_ENABLED) {
+      try {
+        const result = await fetchJson(`${REMOTE_ANALYTICS_URL}/${id}/heartbeat`, { method: "PUT", body: JSON.stringify(patch) });
+        if (result) {
+          // Sync local storage with server response
+          const sessions = await ensureSiteSessions();
+          const index = sessions.findIndex((s) => s.id === id);
+          const next = [...sessions];
+          if (index === -1) next.unshift(result);
+          else next[index] = result;
+          await saveSiteSessions(next);
+          return result;
+        }
+      } catch (err) {
+        console.warn("Failed to sync heartbeat:", err);
+      }
+    }
+
     const sessions = await ensureSiteSessions();
     const index = sessions.findIndex((session) => session.id === id);
     const now = nowIso();
@@ -740,6 +772,13 @@ const userActionEntity = {
       created_date: nowIso(),
       updated_date: nowIso(),
     };
+    if (REMOTE_ENABLED) {
+      try {
+        await fetchJson(REMOTE_USER_ACTIONS_URL, { method: "POST", body: JSON.stringify(next) });
+      } catch (err) {
+        console.warn("Failed to sync remote user action:", err);
+      }
+    }
     const actions = await ensureUserActions();
     const updated = [next, ...actions].slice(0, 10000);
     await saveUserActions(updated);
