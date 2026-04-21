@@ -1,6 +1,6 @@
 services:
   eventflow-frontend:
-    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-trugroup}/eventflow-frontend:${EVENTFLOW_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-efoka24-ops}/eventflow-frontend:${EVENTFLOW_TAG:-latest}
     ports:
       - "8080:80"
     restart: unless-stopped
@@ -8,7 +8,7 @@ services:
       - eventflow-backend
 
   eventflow-backend:
-    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-trugroup}/eventflow-backend:${EVENTFLOW_TAG:-latest}
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-efoka24-ops}/eventflow-backend:${EVENTFLOW_TAG:-latest}
     ports:
       - "3001:3001"
     environment:
@@ -16,6 +16,7 @@ services:
       - PORT=3001
       - NODE_ENV=production
       - JWT_SECRET=${JWT_SECRET}
+      - CORS_ORIGIN=${CORS_ORIGIN:-https://eventflow.trugroup.cm}
     restart: unless-stopped
     depends_on:
       - eventflow-db
