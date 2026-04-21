@@ -22,13 +22,19 @@ const campayFetch = async (path, options = {}) => {
   }
 
   if (!response.ok) {
+    console.error(`[CamPay] ${options.method || "GET"} ${path} → HTTP ${response.status}`, JSON.stringify(data));
     const message = data?.message || data?.error || `CamPay error (${response.status})`;
-    // CamPay demo environment has strict amount limits; expose as a functional 400
-    if (String(message).toLowerCase().includes("maximum amount is")) {
+    const normalizedMessage = String(message || "").toLowerCase();
+    if (
+      normalizedMessage.includes("maximum amount is") ||
+      normalizedMessage.includes("demo system") ||
+      normalizedMessage.includes("25.00 xaf")
+    ) {
       throw httpError(400, message);
     }
     throw httpError(502, message);
   }
+  console.log(`[CamPay] ${options.method || "GET"} ${path} → OK`, JSON.stringify(data));
 
   return data;
 };
@@ -43,13 +49,17 @@ const getTemporaryToken = async () => {
     return cachedToken;
   }
 
+  console.log("[CamPay] Requesting token with username:", config.campayUsername?.substring(0, 20) + "...");
+  // CamPay live uses client_id/client_secret; demo uses username/password
+  const isLive = !String(config.campayBaseUrl || "").includes("demo");
+  const body = isLive
+    ? { client_id: config.campayUsername, client_secret: config.campayPassword }
+    : { username: config.campayUsername, password: config.campayPassword };
   const data = await campayFetch("/token/", {
     method: "POST",
-    body: JSON.stringify({
-      username: config.campayUsername,
-      password: config.campayPassword,
-    }),
+    body: JSON.stringify(body),
   });
+  console.log("[CamPay] Token response:", JSON.stringify(data));
 
   cachedToken = data.token;
   cachedTokenExpiresAt = now + Number(data.expires_in || 0) * 1000;
@@ -58,6 +68,7 @@ const getTemporaryToken = async () => {
 
 const getAuthHeader = async () => {
   if (config.campayPermanentToken) {
+    // Try both Token and Bearer — live CamPay uses Token
     return `Token ${config.campayPermanentToken}`;
   }
 

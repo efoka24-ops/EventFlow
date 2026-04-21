@@ -22,6 +22,16 @@ const detectEmailProvider = (email) => {
   return normalized.split("@")[1] || null;
 };
 
+const normalizePriceAmount = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value || "").trim();
+  if (!raw) return 0;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) return numeric;
+  const digitsOnly = raw.replace(/\D/g, "");
+  return digitsOnly ? Number(digitsOnly) : 0;
+};
+
 const reverseGeocode = async (latitude, longitude) => {
   const response = await fetch(
     `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
@@ -46,6 +56,34 @@ const reverseGeocode = async (latitude, longitude) => {
   };
 };
 
+const collectPaymentWithFallback = async (payload) => {
+  const endpoints = ["/api/payments/collect", "http://localhost:3001/api/payments/collect"];
+  let lastResponse = null;
+
+  for (let i = 0; i < endpoints.length; i += 1) {
+    const url = endpoints[i];
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      // Retry on direct backend URL when proxy returns gateway-level errors.
+      if ((response.status === 502 || response.status === 503 || response.status === 504) && i < endpoints.length - 1) {
+        lastResponse = response;
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      if (i === endpoints.length - 1) throw error;
+    }
+  }
+
+  return lastResponse;
+};
+
 export default function RegistrationForm({ event, onSuccess }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userLoading, setUserLoading] = useState(true);
@@ -56,12 +94,14 @@ export default function RegistrationForm({ event, onSuccess }) {
   const [ticketLoading, setTicketLoading] = useState(false);
 
   // Payment state
-  const isPaidEvent = event?.price > 0;
+  const paymentAmount = normalizePriceAmount(event?.price);
+  const isPaidEvent = paymentAmount > 0;
   const [paymentStep, setPaymentStep] = useState(false); // show payment panel
   const [paymentId, setPaymentId] = useState(null);
   const [paymentStatus, setPaymentStatus] = useState(null); // 'pending'|'successful'|'failed'
   const [paymentPhone, setPaymentPhone] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentMeta, setPaymentMeta] = useState(null); // campay_reference, operator, paid_at
   const pollRef = useRef(null);
 
   const stopPolling = () => {
@@ -84,6 +124,11 @@ export default function RegistrationForm({ event, onSuccess }) {
         setPaymentStatus(status);
         if (status === "successful") {
           stopPolling();
+          setPaymentMeta({
+            campay_reference: data.payment?.campay_reference || null,
+            operator: data.payment?.operator || null,
+            paid_at: data.payment?.paid_at || new Date().toISOString(),
+          });
           toast.success("Paiement confirmé ! Inscription validée.");
           setSuccess(true);
           if (onSuccess) onSuccess();
@@ -98,40 +143,52 @@ export default function RegistrationForm({ event, onSuccess }) {
   };
 
   const handlePayment = async () => {
-    const phone = paymentPhone.trim();
-    if (!phone) {
-      toast.error("Entrez votre numéro de téléphone MoMo.");
-      return;
-    }
     setPaymentLoading(true);
     try {
-      const res = await fetch("/api/payments/collect", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          registration_id: savedRegistration?.id,
-          event_id: event.id,
-          amount: event.price,
-          phone_number: phone,
-          description: `Inscription – ${event.title}`,
-        }),
+      const res = await collectPaymentWithFallback({
+        registration_id: savedRegistration?.id,
+        event_id: event.id,
+        amount: paymentAmount,
+        description: `Inscription – ${event.title}`,
+        redirect_url: `${window.location.origin}/payment/success`,
+        failure_redirect_url: `${window.location.origin}/payment/cancel`,
       });
-      const data = await res.json();
+
+      if (!res) throw new Error("Service paiement indisponible");
+
+      const raw = await res.text();
+      let data = {};
+      try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: raw || "Erreur paiement" }; }
+
       if (!res.ok) {
-        throw new Error(data.error || data.message || "Erreur paiement");
+        const raw_msg = data.error || data.message || "Erreur paiement";
+        const m = raw_msg.toLowerCase();
+        if (m.includes("outside allowed limits") || m.includes("min:")) {
+          const minMatch = raw_msg.match(/Min:\s*([\d.]+)/i);
+          const min = minMatch ? Math.ceil(Number(minMatch[1])) : 100;
+          throw new Error(`Montant insuffisant. Le montant minimum de paiement est ${min.toLocaleString()} FCFA.`);
+        }
+        if (m.includes("service") && m.includes("not found")) throw new Error("Service de paiement temporairement indisponible. Réessayez plus tard.");
+        if (m.includes("doesn't support")) throw new Error("Ce réseau n'est pas encore activé pour les paiements. Contactez le support.");
+        throw new Error(raw_msg);
       }
+
       const pid = data.payment?.id ?? data.id;
+      const checkoutUrl = data.checkout_url;
+
       setPaymentId(pid);
       setPaymentStatus("pending");
-      toast.info("Vérifiez votre téléphone pour valider le paiement MoMo.");
+
+      if (checkoutUrl) {
+        window.open(checkoutUrl, "_blank", "noopener");
+        toast.info("Page de paiement ouverte dans un nouvel onglet. Complétez le paiement puis revenez ici.");
+      } else {
+        toast.info("Paiement initié. Vérification en cours...");
+      }
+
       startPolling(pid);
     } catch (err) {
-      const message = err?.message || "Impossible de lancer le paiement.";
-      if (message.toLowerCase().includes("maximum amount is")) {
-        toast.error("CamPay démo limite les tests à 25 XAF max. Réduisez le prix de test ou passez en production.");
-      } else {
-        toast.error(message);
-      }
+      toast.error(err?.message || "Impossible de lancer le paiement.");
     } finally {
       setPaymentLoading(false);
     }
@@ -291,7 +348,7 @@ export default function RegistrationForm({ event, onSuccess }) {
         // Pre-fill payment phone from form
         setPaymentPhone(formData.phone || "");
         setPaymentStep(true);
-        toast.info(`Événement payant — ${event.price.toLocaleString()} FCFA. Procédez au paiement.`);
+        toast.info(`Événement payant — ${paymentAmount.toLocaleString()} FCFA. Procédez au paiement.`);
       } else {
         setSuccess(true);
         toast.success("Inscription envoyée avec succès !");
@@ -315,51 +372,46 @@ export default function RegistrationForm({ event, onSuccess }) {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Smartphone className="w-5 h-5 text-primary" />
-              Paiement Mobile Money
+              Paiement Mobile Money – Easy Transact
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 space-y-1">
               <p className="text-sm text-muted-foreground">Événement</p>
               <p className="font-semibold">{event.title}</p>
-              <p className="text-lg font-bold text-primary">{event.price?.toLocaleString()} FCFA</p>
+              <p className="text-lg font-bold text-primary">{paymentAmount.toLocaleString()} FCFA</p>
             </div>
 
             {paymentStatus === null && (
               <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Numéro MoMo (MTN ou Orange) *</Label>
-                  <Input
-                    type="tel"
-                    placeholder="ex: 6XXXXXXXX"
-                    value={paymentPhone}
-                    onChange={(e) => setPaymentPhone(e.target.value)}
-                    disabled={paymentLoading}
-                  />
-                  <p className="text-xs text-muted-foreground">Entrez le numéro qui recevra la demande de paiement.</p>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  Vous serez redirigé vers la page de paiement sécurisé Easy Transact pour compléter votre paiement Mobile Money (MTN ou Orange).
+                </p>
                 <Button className="w-full" size="lg" onClick={handlePayment} disabled={paymentLoading}>
                   {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Smartphone className="w-4 h-4 mr-2" />}
-                  {paymentLoading ? "Envoi en cours..." : "Payer maintenant"}
+                  {paymentLoading ? "Préparation du paiement..." : "Payer maintenant"}
                 </Button>
               </div>
             )}
 
-            {paymentStatus === "pending" && (
+            {(paymentStatus === "pending" || paymentStatus === "initiated") && (
               <div className="flex flex-col items-center gap-4 py-4">
                 <div className="w-16 h-16 rounded-full bg-amber-100 flex items-center justify-center">
                   <Clock className="w-8 h-8 text-amber-600 animate-pulse" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="font-semibold">En attente de confirmation</p>
+                  <p className="font-semibold">En attente de votre paiement</p>
                   <p className="text-sm text-muted-foreground">
-                    Une demande a été envoyée au <strong>{paymentPhone}</strong>.<br />
-                    Approuvez-la sur votre téléphone.
+                    Complétez le paiement dans l'onglet Easy Transact puis revenez ici.<br />
+                    <span className="text-amber-600">Cette page se met à jour automatiquement dès la confirmation.</span>
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300">
                   <Loader2 className="w-3 h-3 animate-spin" /> Vérification en cours…
                 </Badge>
+                <Button variant="ghost" size="sm" onClick={handlePayment} disabled={paymentLoading}>
+                  Ouvrir à nouveau la page de paiement
+                </Button>
               </div>
             )}
 
@@ -389,7 +441,7 @@ export default function RegistrationForm({ event, onSuccess }) {
     const handleDownloadTicket = async () => {
       setTicketLoading(true);
       try {
-        await generateTicketPDF({ event, registration: savedRegistration || formData });
+        await generateTicketPDF({ event, registration: savedRegistration || formData, payment: paymentMeta });
       } catch {
         toast.error("Impossible de générer le billet. Réessayez.");
       } finally {
@@ -572,7 +624,7 @@ export default function RegistrationForm({ event, onSuccess }) {
             {loading
               ? "Inscription en cours..."
               : isPaidEvent
-              ? `S'inscrire et payer (${event.price?.toLocaleString()} FCFA)`
+                ? `S'inscrire et payer (${paymentAmount.toLocaleString()} FCFA)`
               : "S'inscrire"}
           </Button>
         </form>
