@@ -13,23 +13,23 @@ const env = (typeof import.meta !== "undefined" && import.meta.env) ? import.met
 const REMOTE_EVENTS_URL =
   env.VITE_EVENTFLOW_EVENTS_ENDPOINT ||
   env.VITE_EVENTFLOW_EVENTS_BLOB_URL ||
-  "/storage/events";
+  "/api/events";
 const REMOTE_REGISTRATIONS_URL =
   env.VITE_EVENTFLOW_REGISTRATIONS_ENDPOINT ||
   env.VITE_EVENTFLOW_REGISTRATIONS_BLOB_URL ||
-  "/storage/registrations";
+  "/api/registrations";
 const REMOTE_ANALYTICS_URL =
   env.VITE_EVENTFLOW_ANALYTICS_ENDPOINT ||
   env.VITE_EVENTFLOW_ANALYTICS_BLOB_URL ||
-  "";
+  "/api/site-sessions";
 const REMOTE_FEEDBACK_URL =
   env.VITE_EVENTFLOW_FEEDBACK_ENDPOINT ||
   env.VITE_EVENTFLOW_FEEDBACK_BLOB_URL ||
-  "";
+  "/api/event-feedback";
 const REMOTE_USER_ACTIONS_URL =
   env.VITE_EVENTFLOW_USER_ACTIONS_ENDPOINT ||
   env.VITE_EVENTFLOW_USER_ACTIONS_BLOB_URL ||
-  "";
+  "/api/user-actions";
 const REMOTE_DISABLED = String(env.VITE_EVENTFLOW_REMOTE_DISABLED || "false") === "true";
 const REMOTE_ENABLED = !REMOTE_DISABLED && Boolean(REMOTE_EVENTS_URL && REMOTE_REGISTRATIONS_URL);
 const REMOTE_ANALYTICS_ENABLED = !REMOTE_DISABLED && Boolean(REMOTE_ANALYTICS_URL);
