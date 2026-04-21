@@ -267,10 +267,11 @@ CREATE TABLE IF NOT EXISTS payments (
   event_id uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
 
   provider text NOT NULL DEFAULT 'campay',
-  endpoint text NOT NULL CHECK (endpoint IN ('collect', 'payment_link')),
+  endpoint text NOT NULL CHECK (endpoint IN ('collect', 'payment_link', 'checkout-link')),
 
   amount integer NOT NULL CHECK (amount > 0),
   currency text NOT NULL DEFAULT 'XAF',
+  payer_name text,
   phone_number text,
   description text,
 

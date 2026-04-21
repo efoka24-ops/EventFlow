@@ -25,6 +25,7 @@ const collectSchema = z.object({
   redirect_url: z.string().url().optional(),
   failure_redirect_url: z.string().url().optional(),
   payer_name: z.string().max(200).optional(),
+  phone_number: z.string().max(30).optional(),
 });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -82,8 +83,8 @@ router.post("/collect", async (req, res, next) => {
     const inserted = await dbTryQuery(
       `INSERT INTO payments (
         registration_id, event_id, provider, endpoint, amount, currency,
-        description, external_reference, status_local
-      ) VALUES ($1,$2,'easytransact','checkout-link',$3,$4,$5,$6,'initiated')
+        description, external_reference, status_local, payer_name, phone_number
+      ) VALUES ($1,$2,'easytransact','checkout-link',$3,$4,$5,$6,'initiated',$7,$8)
       RETURNING *`,
       [
         payload.registration_id || null,
@@ -92,6 +93,8 @@ router.post("/collect", async (req, res, next) => {
         payload.currency,
         payload.description,
         externalReference,
+        payload.payer_name || null,
+        payload.phone_number || null,
       ]
     );
 
@@ -106,6 +109,8 @@ router.post("/collect", async (req, res, next) => {
       description: payload.description,
       external_reference: externalReference,
       status_local: "initiated",
+      payer_name: payload.payer_name || null,
+      phone_number: payload.phone_number || null,
       created_date: now,
     };
     if (!inserted) { memPayments.set(payment.id, payment); saveMemPayments(); }

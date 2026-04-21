@@ -27,6 +27,24 @@ Ce dossier contient le schéma SQL complet du projet.
 psql -U <user> -d eventflow -f database/schema.sql
 ```
 
+## Migrations
+
+Les migrations se trouvent dans `migrations/` et s'appliquent sur une base **déjà existante** (sans recréer les tables).
+
+### 002 — Champs payeur sur les paiements
+
+Fichier : `migrations/002_payments_payer_fields.sql`
+
+Ajoute la colonne `payer_name` et étend la contrainte `endpoint` pour accepter `checkout-link` (Easy Transact).
+
+```bash
+psql -U <user> -d eventflow -f database/migrations/002_payments_payer_fields.sql
+```
+
+> **Pourquoi ?** Sans cette migration, les champs **Payeur**, **Téléphone**, **Opérateur** et **Payé le** apparaissent comme `—` dans le détail de paiement du back office.
+
+---
+
 ## Notes
 
 - Les colonnes temporelles sont alignées avec le front actuel (`created_date`, `updated_date`).
