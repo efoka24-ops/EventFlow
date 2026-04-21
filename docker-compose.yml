@@ -6,6 +6,8 @@ services:
     restart: unless-stopped
     depends_on:
       - eventflow-backend
+    networks:
+      - eventflow-network
 
   eventflow-backend:
     image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-efoka24-ops}/eventflow-backend:${EVENTFLOW_TAG:-latest}
@@ -20,6 +22,8 @@ services:
     restart: unless-stopped
     depends_on:
       - eventflow-db
+    networks:
+      - eventflow-network
 
   eventflow-db:
     image: postgres:16-alpine
@@ -30,6 +34,12 @@ services:
     volumes:
       - eventflow_postgres_data:/var/lib/postgresql/data
     restart: unless-stopped
+    networks:
+      - eventflow-network
+
+networks:
+  eventflow-network:
+    driver: bridge
 
 volumes:
   eventflow_postgres_data:
