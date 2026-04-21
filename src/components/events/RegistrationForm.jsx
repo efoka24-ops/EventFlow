@@ -154,6 +154,8 @@ export default function RegistrationForm({ event, onSuccess }) {
         event_id: event.id,
         amount: paymentAmount,
         description: `Inscription – ${event.title}`,
+        payer_name: [formData.first_name, formData.last_name].filter(Boolean).join(" ") || undefined,
+        phone_number: formData.phone || undefined,
         redirect_url: `${window.location.origin}/payment/success`,
         failure_redirect_url: `${window.location.origin}/payment/cancel`,
       });
