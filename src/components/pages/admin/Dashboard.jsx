@@ -38,6 +38,8 @@ export default function Dashboard() {
   const { data: registrations = [] } = useQuery({
     queryKey: ["admin-registrations"],
     queryFn: () => base44.entities.Registration.list("-created_date"),
+    refetchInterval: 30_000,
+    refetchOnMount: "always",
   });
 
   const { data: sessions = [] } = useQuery({
