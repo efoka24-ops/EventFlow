@@ -1,6 +1,34 @@
 services:
-  eventflow:
-    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-trugroup}/eventflow:${EVENTFLOW_TAG:-latest}
+  eventflow-frontend:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-trugroup}/eventflow-frontend:${EVENTFLOW_TAG:-latest}
     ports:
       - "8080:80"
     restart: unless-stopped
+    depends_on:
+      - eventflow-backend
+
+  eventflow-backend:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER:-trugroup}/eventflow-backend:${EVENTFLOW_TAG:-latest}
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@eventflow-db:5432/${POSTGRES_DB}
+      - PORT=3001
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET}
+    restart: unless-stopped
+    depends_on:
+      - eventflow-db
+
+  eventflow-db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-eventflow}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-eventflow_pass}
+      - POSTGRES_DB=${POSTGRES_DB:-eventflow_db}
+    volumes:
+      - eventflow_postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  eventflow_postgres_data:
