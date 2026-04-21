@@ -30,15 +30,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Docker image
+      - name: Build and Push Frontend
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
-            ghcr.io/${{ github.repository_owner }}/eventflow:${{ github.run_number }}
-            ghcr.io/${{ github.repository_owner }}/eventflow:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/eventflow-frontend:${{ github.run_number }}
+            ghcr.io/${{ github.repository_owner }}/eventflow-frontend:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and Push Backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/eventflow-backend:${{ github.run_number }}
+            ghcr.io/${{ github.repository_owner }}/eventflow-backend:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -75,12 +87,9 @@ jobs:
             fi
 
             echo "Pull latest images"
-            docker compose pull
+            docker compose -p eventflow pull
 
             echo "Recreate containers"
-            docker compose up -d --force-recreate --remove-orphans
-
-            echo "Remove unused images"
-            docker image prune -af
+            docker compose -p eventflow up -d --force-recreate
 
             echo "Deployment finished"
