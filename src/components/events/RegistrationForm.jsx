@@ -143,77 +143,52 @@ export default function RegistrationForm({ event, onSuccess }) {
   };
 
   const handlePayment = async () => {
-    const phone = paymentPhone.trim();
-    if (!phone) {
-      toast.error("Entrez votre numéro de téléphone MoMo.");
-      return;
-    }
-
-    // CamPay demo sandbox rejects amounts above 25 XAF.
-    if (paymentAmount > 25) {
-      toast.error("Mode démo CamPay: montant max 25 XAF. Baissez le prix pour tester.");
-      return;
-    }
-
     setPaymentLoading(true);
     try {
-      // Detect Orange Money numbers (69X) — not supported by CamPay demo
-      const digits = phone.replace(/\D/g, "");
-      const isOrange = digits.startsWith("69") || (digits.startsWith("23769"));
-      if (isOrange) {
-        toast.error("Orange Money n'est pas supporté par ce compte CamPay. Utilisez un numéro MTN (67X ou 65X).");
-        setPaymentLoading(false);
-        return;
-      }
-
-      const payerName = [formData.first_name, formData.last_name].filter(Boolean).join(" ") || null;
-      const geoPayload = (!geo.loading && geo.latitude) ? {
-        latitude: geo.latitude,
-        longitude: geo.longitude,
-        city: geo.city || null,
-        region: geo.region || null,
-        country: geo.country || null,
-      } : null;
-      const deviceInfo = navigator.userAgent?.substring(0, 500) || null;
-
       const res = await collectPaymentWithFallback({
         registration_id: savedRegistration?.id,
         event_id: event.id,
         amount: paymentAmount,
-        phone_number: phone,
         description: `Inscription – ${event.title}`,
-        payer_name: payerName,
-        geolocation: geoPayload,
-        device_info: deviceInfo,
+        redirect_url: `${window.location.origin}/payment/success`,
+        failure_redirect_url: `${window.location.origin}/payment/cancel`,
       });
 
-      if (!res) {
-        throw new Error("Service paiement indisponible (proxy et backend injoignables)");
-      }
+      if (!res) throw new Error("Service paiement indisponible");
 
       const raw = await res.text();
       let data = {};
-      try {
-        data = raw ? JSON.parse(raw) : {};
-      } catch {
-        data = { error: raw || "Erreur paiement" };
-      }
+      try { data = raw ? JSON.parse(raw) : {}; } catch { data = { error: raw || "Erreur paiement" }; }
 
       if (!res.ok) {
-        throw new Error(data.error || data.message || "Erreur paiement");
+        const raw_msg = data.error || data.message || "Erreur paiement";
+        const m = raw_msg.toLowerCase();
+        if (m.includes("outside allowed limits") || m.includes("min:")) {
+          const minMatch = raw_msg.match(/Min:\s*([\d.]+)/i);
+          const min = minMatch ? Math.ceil(Number(minMatch[1])) : 100;
+          throw new Error(`Montant insuffisant. Le montant minimum de paiement est ${min.toLocaleString()} FCFA.`);
+        }
+        if (m.includes("service") && m.includes("not found")) throw new Error("Service de paiement temporairement indisponible. Réessayez plus tard.");
+        if (m.includes("doesn't support")) throw new Error("Ce réseau n'est pas encore activé pour les paiements. Contactez le support.");
+        throw new Error(raw_msg);
       }
+
       const pid = data.payment?.id ?? data.id;
+      const checkoutUrl = data.checkout_url;
+
       setPaymentId(pid);
       setPaymentStatus("pending");
-      toast.info("Vérifiez votre téléphone pour valider le paiement MoMo.");
+
+      if (checkoutUrl) {
+        window.open(checkoutUrl, "_blank", "noopener");
+        toast.info("Page de paiement ouverte dans un nouvel onglet. Complétez le paiement puis revenez ici.");
+      } else {
+        toast.info("Paiement initié. Vérification en cours...");
+      }
+
       startPolling(pid);
     } catch (err) {
-      const message = err?.message || "Impossible de lancer le paiement.";
-      if (message.toLowerCase().includes("maximum amount is")) {
-        toast.error("CamPay démo limite les tests à 25 XAF max. Réduisez le prix de test ou passez en production.");
-      } else {
-        toast.error(message);
-      }
+      toast.error(err?.message || "Impossible de lancer le paiement.");
     } finally {
       setPaymentLoading(false);
     }
@@ -397,7 +372,7 @@ export default function RegistrationForm({ event, onSuccess }) {
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Smartphone className="w-5 h-5 text-primary" />
-              Paiement Mobile Money
+              Paiement Mobile Money – Easy Transact
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
@@ -409,20 +384,12 @@ export default function RegistrationForm({ event, onSuccess }) {
 
             {paymentStatus === null && (
               <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Numéro MoMo (MTN ou Orange) *</Label>
-                  <Input
-                    type="tel"
-                    placeholder="ex: 6XXXXXXXX"
-                    value={paymentPhone}
-                    onChange={(e) => setPaymentPhone(e.target.value)}
-                    disabled={paymentLoading}
-                  />
-                  <p className="text-xs text-muted-foreground">Entrez le numéro qui recevra la demande de paiement.</p>
-                </div>
+                <p className="text-sm text-muted-foreground">
+                  Vous serez redirigé vers la page de paiement sécurisé Easy Transact pour compléter votre paiement Mobile Money (MTN ou Orange).
+                </p>
                 <Button className="w-full" size="lg" onClick={handlePayment} disabled={paymentLoading}>
                   {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Smartphone className="w-4 h-4 mr-2" />}
-                  {paymentLoading ? "Envoi en cours..." : "Payer maintenant"}
+                  {paymentLoading ? "Préparation du paiement..." : "Payer maintenant"}
                 </Button>
               </div>
             )}
@@ -433,16 +400,18 @@ export default function RegistrationForm({ event, onSuccess }) {
                   <Clock className="w-8 h-8 text-amber-600 animate-pulse" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="font-semibold">Confirmez le paiement sur votre téléphone</p>
+                  <p className="font-semibold">En attente de votre paiement</p>
                   <p className="text-sm text-muted-foreground">
-                    Une notification MoMo a été envoyée au <strong>{paymentPhone}</strong>.<br />
-                    Ouvrez votre application Mobile Money et <strong>validez la demande</strong>.<br />
-                    <span className="text-amber-600">Si vous ne la recevez pas dans 1 minute, vérifiez vos notifications ou recomposez le <strong>#150#</strong> (MTN) / <strong>#150*4#</strong> (Orange).</span>
+                    Complétez le paiement dans l'onglet Easy Transact puis revenez ici.<br />
+                    <span className="text-amber-600">Cette page se met à jour automatiquement dès la confirmation.</span>
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300">
-                  <Loader2 className="w-3 h-3 animate-spin" /> En attente de votre validation…
+                  <Loader2 className="w-3 h-3 animate-spin" /> Vérification en cours…
                 </Badge>
+                <Button variant="ghost" size="sm" onClick={handlePayment} disabled={paymentLoading}>
+                  Ouvrir à nouveau la page de paiement
+                </Button>
               </div>
             )}
 

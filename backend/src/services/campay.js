@@ -22,9 +22,9 @@ const campayFetch = async (path, options = {}) => {
   }
 
   if (!response.ok) {
+    console.error(`[CamPay] ${options.method || "GET"} ${path} → HTTP ${response.status}`, JSON.stringify(data));
     const message = data?.message || data?.error || `CamPay error (${response.status})`;
     const normalizedMessage = String(message || "").toLowerCase();
-    // CamPay demo environment has strict amount limits; expose as a functional 400
     if (
       normalizedMessage.includes("maximum amount is") ||
       normalizedMessage.includes("demo system") ||
@@ -32,19 +32,9 @@ const campayFetch = async (path, options = {}) => {
     ) {
       throw httpError(400, message);
     }
-    // Orange Money not supported by this CamPay account / demo
-    if (
-      normalizedMessage.includes("operator not supported") ||
-      normalizedMessage.includes("not supported") ||
-      normalizedMessage.includes("orange") ||
-      normalizedMessage.includes("invalid phone") ||
-      normalizedMessage.includes("unsupported operator") ||
-      normalizedMessage.includes("could not determine operator")
-    ) {
-      throw httpError(400, "Opérateur non supporté : seul MTN MoMo est disponible pour ce compte CamPay. Utilisez un numéro MTN (67X / 65X).");
-    }
     throw httpError(502, message);
   }
+  console.log(`[CamPay] ${options.method || "GET"} ${path} → OK`, JSON.stringify(data));
 
   return data;
 };
@@ -59,13 +49,17 @@ const getTemporaryToken = async () => {
     return cachedToken;
   }
 
+  console.log("[CamPay] Requesting token with username:", config.campayUsername?.substring(0, 20) + "...");
+  // CamPay live uses client_id/client_secret; demo uses username/password
+  const isLive = !String(config.campayBaseUrl || "").includes("demo");
+  const body = isLive
+    ? { client_id: config.campayUsername, client_secret: config.campayPassword }
+    : { username: config.campayUsername, password: config.campayPassword };
   const data = await campayFetch("/token/", {
     method: "POST",
-    body: JSON.stringify({
-      username: config.campayUsername,
-      password: config.campayPassword,
-    }),
+    body: JSON.stringify(body),
   });
+  console.log("[CamPay] Token response:", JSON.stringify(data));
 
   cachedToken = data.token;
   cachedTokenExpiresAt = now + Number(data.expires_in || 0) * 1000;
@@ -74,6 +68,7 @@ const getTemporaryToken = async () => {
 
 const getAuthHeader = async () => {
   if (config.campayPermanentToken) {
+    // Try both Token and Bearer — live CamPay uses Token
     return `Token ${config.campayPermanentToken}`;
   }
 

@@ -15,10 +15,13 @@ const freePort = (port) => {
   }
 };
 
+let activeServer = null;
+
 const startServer = () => {
   const server = app.listen(config.port, () => {
     console.log(`EventFlow backend running on http://localhost:${config.port}`);
   });
+  activeServer = server;
 
   server.on("error", (err) => {
     if (err?.code === "EADDRINUSE") {
@@ -34,8 +37,8 @@ const startServer = () => {
 startServer();
 
 const shutdown = () => {
-  if (!server) process.exit(0);
-  server.close(() => process.exit(0));
+  if (!activeServer) return process.exit(0);
+  activeServer.close(() => process.exit(0));
 };
 
 process.on("SIGINT", shutdown);
