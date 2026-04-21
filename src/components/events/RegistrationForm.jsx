@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Mail, FileText, Loader2, CheckCircle2, User, Download, Smartphone, AlertCircle, Clock } from "lucide-react";
+import { Mail, FileText, Loader2, CheckCircle2, User, Download, Smartphone, AlertCircle, Clock, ExternalLink } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { generateTicketPDF } from "@/utils/generateTicket";
@@ -101,7 +102,9 @@ export default function RegistrationForm({ event, onSuccess }) {
   const [paymentStatus, setPaymentStatus] = useState(null); // 'pending'|'successful'|'failed'
   const [paymentPhone, setPaymentPhone] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
-  const [paymentMeta, setPaymentMeta] = useState(null); // campay_reference, operator, paid_at
+  const [paymentMeta, setPaymentMeta] = useState(null);
+  const [checkoutUrl, setCheckoutUrl] = useState(null);
+  const lastCheckoutUrl = useRef(null); // keep ref to reopen modal
   const pollRef = useRef(null);
 
   const stopPolling = () => {
@@ -124,6 +127,7 @@ export default function RegistrationForm({ event, onSuccess }) {
         setPaymentStatus(status);
         if (status === "successful") {
           stopPolling();
+          setCheckoutUrl(null);
           setPaymentMeta({
             campay_reference: data.payment?.campay_reference || null,
             operator: data.payment?.operator || null,
@@ -180,8 +184,9 @@ export default function RegistrationForm({ event, onSuccess }) {
       setPaymentStatus("pending");
 
       if (checkoutUrl) {
-        window.open(checkoutUrl, "_blank", "noopener");
-        toast.info("Page de paiement ouverte dans un nouvel onglet. Complétez le paiement puis revenez ici.");
+        lastCheckoutUrl.current = checkoutUrl;
+        setCheckoutUrl(checkoutUrl);
+        toast.info("Complétez le paiement dans la fenêtre ci-dessous.");
       } else {
         toast.info("Paiement initié. Vérification en cours...");
       }
@@ -368,6 +373,30 @@ export default function RegistrationForm({ event, onSuccess }) {
   if (paymentStep && !success) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        {/* Checkout modal */}
+        <Dialog open={!!checkoutUrl} onOpenChange={(open) => { if (!open) setCheckoutUrl(null); }}>
+          <DialogContent className="max-w-lg w-full p-0 overflow-hidden" style={{ height: "85vh" }}>
+            <DialogHeader className="px-4 py-3 border-b flex-row items-center justify-between">
+              <DialogTitle className="text-base flex items-center gap-2">
+                <Smartphone className="w-4 h-4 text-primary" />
+                Paiement – {paymentAmount.toLocaleString()} FCFA
+              </DialogTitle>
+              <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground flex items-center gap-1 hover:text-primary">
+                <ExternalLink className="w-3 h-3" /> Ouvrir dans un onglet
+              </a>
+            </DialogHeader>
+            {checkoutUrl && (
+              <iframe
+                src={checkoutUrl}
+                title="Paiement Easy Transact"
+                className="w-full flex-1"
+                style={{ height: "calc(85vh - 56px)", border: "none" }}
+                allow="payment"
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
@@ -385,7 +414,7 @@ export default function RegistrationForm({ event, onSuccess }) {
             {paymentStatus === null && (
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Vous serez redirigé vers la page de paiement sécurisé Easy Transact pour compléter votre paiement Mobile Money (MTN ou Orange).
+                  Une fenêtre de paiement sécurisé s'ouvrira sur cette page. Entrez votre numéro Mobile Money (MTN ou Orange) pour valider.
                 </p>
                 <Button className="w-full" size="lg" onClick={handlePayment} disabled={paymentLoading}>
                   {paymentLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Smartphone className="w-4 h-4 mr-2" />}
@@ -400,17 +429,23 @@ export default function RegistrationForm({ event, onSuccess }) {
                   <Clock className="w-8 h-8 text-amber-600 animate-pulse" />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="font-semibold">En attente de votre paiement</p>
+                  <p className="font-semibold">En attente de confirmation du paiement</p>
                   <p className="text-sm text-muted-foreground">
-                    Complétez le paiement dans l'onglet Easy Transact puis revenez ici.<br />
+                    Complétez le paiement dans la fenêtre de paiement.<br />
                     <span className="text-amber-600">Cette page se met à jour automatiquement dès la confirmation.</span>
                   </p>
                 </div>
                 <Badge variant="outline" className="gap-1 text-amber-700 border-amber-300">
                   <Loader2 className="w-3 h-3 animate-spin" /> Vérification en cours…
                 </Badge>
-                <Button variant="ghost" size="sm" onClick={handlePayment} disabled={paymentLoading}>
-                  Ouvrir à nouveau la page de paiement
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => lastCheckoutUrl.current && setCheckoutUrl(lastCheckoutUrl.current)}
+                  disabled={!lastCheckoutUrl.current}
+                >
+                  <Smartphone className="w-3 h-3" /> Rouvrir la fenêtre de paiement
                 </Button>
               </div>
             )}
