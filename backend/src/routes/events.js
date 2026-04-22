@@ -111,6 +111,30 @@ router.post("/", async (req, res, next) => {
   }
 });
 
+router.put("/:id", requireAdmin, async (req, res, next) => {
+  try {
+    const updates = Object.entries(req.body || {}).filter(
+      ([key, value]) => writableFields.includes(key) && value !== undefined
+    );
+
+    if (!updates.length) return next(httpError(400, "No valid fields to update"));
+
+    const setClause = updates.map(([key], i) => `${key} = $${i + 1}`).join(", ");
+    const values = updates.map(([, value]) => value);
+    values.push(req.params.id);
+
+    const result = await query(
+      `UPDATE events SET ${setClause} WHERE id = $${values.length} RETURNING *`,
+      values
+    );
+
+    if (!result.rowCount) return next(httpError(404, "Event not found"));
+    res.json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.patch("/:id", requireAdmin, async (req, res, next) => {
   try {
     const updates = Object.entries(req.body || {}).filter(
