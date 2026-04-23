@@ -1,129 +1,95 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { base44 } from '@/api/base44Client';
-import { appParams } from '@/lib/app-params';
+import { createContext, useState, useContext, useEffect, useCallback } from "react";
+import { adminLogin as apiAdminLogin, adminLogout as apiAdminLogout, getAdminUser } from "@/api/authApi";
+import { tokenStore } from "@/api/apiClient";
 
 const AuthContext = createContext();
-const ADMIN_PASSWORD = (/** @type {any} */ (import.meta).env?.VITE_ADMIN_PASSWORD || 'admin123').trim();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-  const [isLoadingPublicSettings, setIsLoadingPublicSettings] = useState(true);
-  const [authError, setAuthError] = useState(null);
-  const [appPublicSettings, setAppPublicSettings] = useState(null); // Contains only { id, public_settings }
 
-  useEffect(() => {
-    checkAppState();
+  const loadFromToken = useCallback(() => {
+    const adminUser = getAdminUser();
+    if (adminUser) {
+      setUser(adminUser);
+      setIsAuthenticated(true);
+    } else {
+      setUser(null);
+      setIsAuthenticated(false);
+    }
+    setIsLoadingAuth(false);
   }, []);
 
-  const checkAppState = async () => {
-    setIsLoadingPublicSettings(false);
-    setAuthError(null);
+  useEffect(() => {
+    loadFromToken();
+  }, [loadFromToken]);
 
-    let hasSessionToken = false;
+  const loginAsAdmin = async (email, password) => {
     try {
-      hasSessionToken = Boolean(
-        window.localStorage.getItem('base44_access_token') ||
-        window.localStorage.getItem('base44_token')
-      );
-    } catch {
-      hasSessionToken = false;
-    }
-
-    // If a token is present, verify it; otherwise treat as guest.
-    if (hasSessionToken) {
-      await checkUserAuth();
-    } else {
-      setIsLoadingAuth(false);
-      setIsAuthenticated(false);
-    }
-  };
-
-  const checkUserAuth = async () => {
-    try {
-      // Now check if the user is authenticated
-      setIsLoadingAuth(true);
-      const currentUser = await base44.auth.me();
-      setUser(currentUser);
+      const { user: adminUser } = await apiAdminLogin({ email, password });
+      const decoded = getAdminUser();
+      const merged = { ...adminUser, ...(decoded || {}), role: "admin", isAdmin: true };
+      setUser(merged);
       setIsAuthenticated(true);
-      setIsLoadingAuth(false);
-    } catch (error) {
-      // A failed User/me check simply means the user is not logged in (guest).
-      // Do NOT set authError here — that would block all public pages.
-      try {
-        window.localStorage.removeItem('base44_access_token');
-        window.localStorage.removeItem('base44_token');
-      } catch {}
-      setIsLoadingAuth(false);
-      setIsAuthenticated(false);
+      return true;
+    } catch {
+      return false;
     }
   };
 
-  const logout = (shouldRedirect = true) => {
+  const logout = () => {
+    apiAdminLogout();
+    tokenStore.clearCreatorToken();
     setUser(null);
     setIsAuthenticated(false);
-    
-    if (shouldRedirect) {
-      // Use the SDK's logout method which handles token cleanup and redirect
-      base44.auth.logout(window.location.href);
-    } else {
-      // Just remove the token without redirect
-      base44.auth.logout();
-    }
   };
 
   const navigateToLogin = () => {
-    window.location.assign('/admin/login');
+    window.location.assign("/admin/login");
   };
 
-  const loginAsAdmin = async (password) => {
-    if ((password || '').trim() !== ADMIN_PASSWORD) {
-      return false;
-    }
-
-    const adminUser = {
-      id: 'admin-local',
-      full_name: 'Administrateur',
-      email: 'admin@eventflow.local',
-      role: 'admin',
-      isAdmin: true,
-    };
-
-    try {
-      window.localStorage.setItem('eventflow_current_user', JSON.stringify(adminUser));
-    } catch {
-      // Ignore storage errors in restricted environments.
-    }
-
-    setUser(adminUser);
-    setIsAuthenticated(true);
-    setAuthError(null);
-    return true;
+  const checkUserAuth = () => {
+    loadFromToken();
   };
 
   return (
-    <AuthContext.Provider value={{ 
-      user, 
-      isAuthenticated, 
-      isLoadingAuth,
-      isLoadingPublicSettings,
-      authError,
-      appPublicSettings,
-      logout,
-      loginAsAdmin,
-      navigateToLogin,
-      checkAppState
-    }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isAuthenticated,
+        isLoadingAuth,
+        authChecked: true,
+        isLoadingPublicSettings: false,
+        authError: null,
+        appPublicSettings: null,
+        logout,
+        loginAsAdmin,
+        navigateToLogin,
+        checkUserAuth,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    return {
+      user: null,
+      isAuthenticated: false,
+      isLoadingAuth: false,
+      authChecked: true,
+      isLoadingPublicSettings: false,
+      authError: null,
+      appPublicSettings: null,
+      logout: () => {},
+      loginAsAdmin: async () => false,
+      navigateToLogin: () => { window.location.assign("/admin/login"); },
+      checkUserAuth: () => {},
+    };
   }
-  return context;
+  return ctx;
 };

@@ -10,9 +10,14 @@ const router = Router();
 
 const creatorSignupSchema = z.object({
   full_name: z.string().min(1),
-  email: z.string().email().optional().or(z.literal("")),
-  phone: z.string().optional().or(z.literal("")),
+  email: z.string().email(),
+  phone: z.string().min(1),
   password: z.string().min(4),
+  geo_latitude: z.number().optional(),
+  geo_longitude: z.number().optional(),
+  geo_accuracy: z.number().optional(),
+  geo_source: z.string().optional(),
+  geo_captured_at: z.string().datetime().optional(),
 });
 
 const creatorLoginSchema = z.object({
@@ -20,8 +25,16 @@ const creatorLoginSchema = z.object({
   password: z.string().min(1),
 });
 
+const creatorProfileUpdateSchema = z.object({
+  full_name: z.string().min(1).optional(),
+  email: z.string().email().optional(),
+  phone: z.string().min(1).optional(),
+  current_password: z.string().min(1).optional(),
+  new_password: z.string().min(4).optional(),
+});
+
 const adminLoginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().min(1),
   password: z.string().min(1),
 });
 
@@ -30,8 +43,6 @@ router.post("/creator/signup", async (req, res, next) => {
     const payload = creatorSignupSchema.parse(req.body);
     const email = String(payload.email || "").trim().toLowerCase();
     const phone = String(payload.phone || "").trim();
-
-    if (!email && !phone) return next(httpError(400, "Email or phone is required"));
 
     const exists = await query(
       `SELECT id FROM creator_accounts WHERE (LOWER(email) = LOWER($1) AND $1 <> '') OR (phone = $2 AND $2 <> '') LIMIT 1`,
@@ -42,10 +53,32 @@ router.post("/creator/signup", async (req, res, next) => {
 
     const hashed = await hashPassword(payload.password);
     const created = await query(
-      `INSERT INTO creator_accounts (full_name, email, phone, password_hash, password)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO creator_accounts (
+         full_name,
+         email,
+         phone,
+         password_hash,
+         password,
+         geo_latitude,
+         geo_longitude,
+         geo_accuracy,
+         geo_source,
+         geo_captured_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id, full_name, email, phone, created_date`,
-      [payload.full_name.trim(), email || null, phone || null, hashed, payload.password]
+      [
+        payload.full_name.trim(),
+        email,
+        phone,
+        hashed,
+        payload.password,
+        payload.geo_latitude ?? null,
+        payload.geo_longitude ?? null,
+        payload.geo_accuracy ?? null,
+        payload.geo_source || null,
+        payload.geo_captured_at || null,
+      ]
     );
 
     const user = created.rows[0];
@@ -96,17 +129,53 @@ router.post("/creator/login", async (req, res, next) => {
 router.post("/admin/login", async (req, res, next) => {
   try {
     const payload = adminLoginSchema.parse(req.body);
+    const email = payload.email.trim().toLowerCase();
+
+    // Preferred path: authenticate against PostgreSQL admin_accounts.
+    try {
+      const dbAdmin = await query(
+        `SELECT id, full_name, email, password_hash
+         FROM admin_accounts
+         WHERE email = $1 AND is_active = true
+         LIMIT 1`,
+        [email]
+      );
+
+      if (dbAdmin.rowCount) {
+        const account = dbAdmin.rows[0];
+        const isValid = await comparePassword(payload.password, account.password_hash);
+        if (!isValid) return next(httpError(401, "Invalid admin credentials"));
+
+        await query("UPDATE admin_accounts SET last_login_at = NOW() WHERE id = $1", [account.id]);
+
+        const token = signToken({ sub: account.id, role: "admin", email: account.email });
+        return res.json({
+          token,
+          user: {
+            id: account.id,
+            role: "admin",
+            email: account.email,
+            full_name: account.full_name,
+          },
+        });
+      }
+    } catch (dbErr) {
+      // Keep compatibility before migrations are applied.
+      if (dbErr?.code !== "42P01") throw dbErr;
+    }
+
+    // Compatibility fallback: env-based admin credentials.
     if (!config.adminEmail || !config.adminPassword) {
       return next(httpError(500, "Admin credentials are not configured"));
     }
 
-    const emailOk = payload.email.trim().toLowerCase() === config.adminEmail.trim().toLowerCase();
+    const emailOk = email === config.adminEmail.trim().toLowerCase();
     const pwdOk = payload.password === config.adminPassword;
 
     if (!emailOk || !pwdOk) return next(httpError(401, "Invalid admin credentials"));
 
     const token = signToken({ sub: "admin", role: "admin", email: config.adminEmail });
-    res.json({ token, user: { id: "admin", role: "admin", email: config.adminEmail } });
+    return res.json({ token, user: { id: "admin", role: "admin", email: config.adminEmail } });
   } catch (err) {
     next(err);
   }
@@ -125,6 +194,83 @@ router.get("/me", requireAuth, async (req, res, next) => {
 
     if (!result.rowCount) return next(httpError(404, "User not found"));
     return res.json({ ...result.rows[0], role: "creator" });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/creator/me", requireAuth, async (req, res, next) => {
+  try {
+    if (req.user?.role === "admin") return next(httpError(403, "Creator account required"));
+
+    const payload = creatorProfileUpdateSchema.parse(req.body || {});
+    const accountId = req.user.sub;
+
+    const accountResult = await query(
+      "SELECT id, full_name, email, phone, password, password_hash FROM creator_accounts WHERE id = $1 LIMIT 1",
+      [accountId]
+    );
+    if (!accountResult.rowCount) return next(httpError(404, "User not found"));
+    const account = accountResult.rows[0];
+
+    const updates = [];
+    const values = [];
+    let i = 1;
+
+    if (payload.full_name !== undefined) {
+      updates.push(`full_name = $${i++}`);
+      values.push(payload.full_name.trim());
+    }
+
+    let nextEmail = account.email;
+    if (payload.email !== undefined) {
+      nextEmail = String(payload.email || "").trim().toLowerCase();
+      const exists = await query(
+        "SELECT id FROM creator_accounts WHERE LOWER(email) = LOWER($1) AND id <> $2 LIMIT 1",
+        [nextEmail, accountId]
+      );
+      if (exists.rowCount) return next(httpError(409, "Email already used"));
+      updates.push(`email = $${i++}`);
+      values.push(nextEmail);
+    }
+
+    let nextPhone = account.phone;
+    if (payload.phone !== undefined) {
+      nextPhone = String(payload.phone || "").trim();
+      const exists = await query(
+        "SELECT id FROM creator_accounts WHERE phone = $1 AND id <> $2 LIMIT 1",
+        [nextPhone, accountId]
+      );
+      if (exists.rowCount) return next(httpError(409, "Phone already used"));
+      updates.push(`phone = $${i++}`);
+      values.push(nextPhone);
+    }
+
+    if (payload.new_password !== undefined) {
+      if (!payload.current_password) return next(httpError(400, "Current password is required"));
+      const isValid = account.password_hash
+        ? await comparePassword(payload.current_password, account.password_hash)
+        : payload.current_password === account.password;
+      if (!isValid) return next(httpError(401, "Current password is invalid"));
+
+      const newHashed = await hashPassword(payload.new_password);
+      updates.push(`password_hash = $${i++}`);
+      values.push(newHashed);
+      updates.push(`password = $${i++}`);
+      values.push(payload.new_password);
+    }
+
+    if (!updates.length) return next(httpError(400, "No valid fields to update"));
+
+    values.push(accountId);
+    const updatedResult = await query(
+      `UPDATE creator_accounts SET ${updates.join(", ")} WHERE id = $${i} RETURNING id, full_name, email, phone, created_date`,
+      values
+    );
+
+    const updated = updatedResult.rows[0];
+    const token = signToken({ sub: updated.id, role: "creator", email: updated.email || null, phone: updated.phone || null });
+    return res.json({ user: updated, token });
   } catch (err) {
     next(err);
   }

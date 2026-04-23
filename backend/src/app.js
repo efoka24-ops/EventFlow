@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import morgan from "morgan";
+import { ZodError } from "zod";
 import { config } from "./config.js";
 import { apiRouter } from "./routes/index.js";
 
@@ -24,10 +25,16 @@ app.get("/health", (_req, res) => {
 app.use("/api", apiRouter);
 
 app.use((err, _req, res, _next) => {
-  const status = err.status || 500;
+  const isZod = err instanceof ZodError;
+  const status = err.status || (isZod ? 400 : 500);
   const message = err.message || "Internal server error";
   if (status >= 500) {
     console.error(err);
   }
-  res.status(status).json({ error: message });
+
+  if (isZod) {
+    return res.status(status).json({ error: err.errors?.map((e) => e.message).join(", ") || "Invalid request payload" });
+  }
+
+  return res.status(status).json({ error: message });
 });

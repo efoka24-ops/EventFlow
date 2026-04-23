@@ -1,6 +1,7 @@
-import React, { useState, useRef } from "react";
-import { base44 } from "@/api/base44Client";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useState, useRef } from "react";
+import { createEvent, updateEvent } from "@/api/eventsApi";
+import { uploadImage } from "@/api/uploadApi";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +19,22 @@ export default function EventFormDialog({ open, onClose, event }) {
   const [imagePreview, setImagePreview] = useState(event?.image_url || null);
   const [imageUploading, setImageUploading] = useState(false);
   const fileInputRef = useRef(null);
-  const [form, setForm] = useState(event || {
+  const [form, setForm] = useState(event ? {
+    ...event,
+    title: event.title || "",
+    description: event.description || "",
+    category: event.category || "autre",
+    date_start: event.date_start || "",
+    date_end: event.date_end || "",
+    location_name: event.location_name || "",
+    city: event.city || "",
+    address: event.address || "",
+    max_participants: event.max_participants ?? "",
+    price: event.price ?? "",
+    status: event.status || "brouillon",
+    tags: event.tags || "",
+    image_url: event.image_url || "",
+  } : {
     title: "",
     description: "",
     category: "autre",
@@ -46,9 +62,9 @@ export default function EventFormDialog({ open, onClose, event }) {
     setImagePreview(localUrl);
     // Upload to server
     setImageUploading(true);
-    const { file_url } = await base44.integrations.Core.UploadFile({ file });
-    setForm((prev) => ({ ...prev, image_url: file_url }));
-    setImagePreview(file_url);
+    const fileUrl = await uploadImage(file);
+    setForm((prev) => ({ ...prev, image_url: fileUrl }));
+    setImagePreview(fileUrl);
     setImageUploading(false);
   };
 
@@ -68,10 +84,10 @@ export default function EventFormDialog({ open, onClose, event }) {
     };
 
     if (isEdit) {
-      await base44.entities.Event.update(event.id, data);
+      await updateEvent(event.id, data);
       toast.success("Événement mis à jour !");
     } else {
-      await base44.entities.Event.create(data);
+      await createEvent(data);
       toast.success("Événement créé !");
     }
     queryClient.invalidateQueries({ queryKey: ["admin-events"] });
@@ -86,6 +102,9 @@ export default function EventFormDialog({ open, onClose, event }) {
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Modifier l'événement" : "Nouvel événement"}</DialogTitle>
+          <DialogDescription>
+            Renseignez les informations de l'evenement puis validez pour enregistrer les changements.
+          </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1.5">

@@ -43,11 +43,56 @@ cd backend
 npm run db:init
 ```
 
+## Migrations PostgreSQL (recommande)
+
+Le projet supporte aussi des migrations versionnees (`database/migrations`).
+
+```bash
+cd backend
+npm run db:migrate
+```
+
+Ordre actuel:
+
+- `001_initial_schema.sql`
+- `002_payments_payer_fields.sql`
+- `003_admin_accounts.sql`
+- `004_demo_seed_data.sql` (donnees de demo, local/staging)
+- `005_registrations_pending_payment_status.sql`
+
+Le runner cree automatiquement la table `schema_migrations`.
+
+## Seed admin (PostgreSQL)
+
+Apres les migrations, cree/met a jour le compte admin depuis les variables d'environnement:
+
+```bash
+cd backend
+npm run db:seed-admin
+```
+
+Variables requises:
+
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `ADMIN_FULL_NAME` (optionnelle)
+
 ## Lancer le serveur
 
 ```bash
 cd backend
 npm run dev
+```
+
+Au demarrage (`dev` et `start`), le backend lance automatiquement:
+
+- `db:migrate`
+- `db:seed-admin` (si `ADMIN_EMAIL` et `ADMIN_PASSWORD` sont definis)
+
+Commande manuelle equivalente:
+
+```bash
+npm run db:bootstrap
 ```
 
 API disponible sur: `http://localhost:4000`
@@ -84,6 +129,24 @@ Health check: `GET /health`
 - `GET /api/payments/reference/:reference`
 - `POST /api/payments/webhook/campay`
 - `GET /api/payments` (admin)
+
+## Tests end-to-end (metier, securite, charge)
+
+Depuis `backend/`:
+
+```bash
+npm run test:e2e:business
+npm run test:e2e:security
+npm run test:e2e:load
+```
+
+Variables optionnelles:
+
+- `E2E_BASE_URL` (default: `http://localhost:3001/api`)
+- `E2E_ADMIN_EMAIL`
+- `E2E_ADMIN_PASSWORD`
+- `E2E_LOAD_CONCURRENCY`
+- `E2E_LOAD_REQUESTS_PER_WORKER`
 
 ## Paiement CamPay
 

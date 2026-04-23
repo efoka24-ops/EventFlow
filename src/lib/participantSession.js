@@ -1,21 +1,17 @@
-const PARTICIPANT_EMAIL_KEY = "eventflow_participant_email";
+const KEY = "eventflow_participant_email";
 
-export const normalizeParticipantEmail = (email) =>
-  String(email || "").trim().toLowerCase();
+export const normalizeParticipantEmail = (v) => String(v || "").trim().toLowerCase();
 
 export const getParticipantEmail = () => {
-  if (typeof window === "undefined") return "";
-  return normalizeParticipantEmail(window.localStorage.getItem(PARTICIPANT_EMAIL_KEY) || "");
+  try { return normalizeParticipantEmail(window.localStorage.getItem(KEY) || ""); } catch { return ""; }
 };
 
 export const setParticipantEmail = (email) => {
-  if (typeof window === "undefined") return;
-  const normalized = normalizeParticipantEmail(email);
-  if (!normalized) return;
-  window.localStorage.setItem(PARTICIPANT_EMAIL_KEY, normalized);
+  const v = normalizeParticipantEmail(email);
+  if (!v) return;
+  try { window.localStorage.setItem(KEY, v); } catch {}
 };
 
 export const clearParticipantEmail = () => {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(PARTICIPANT_EMAIL_KEY);
+  try { window.localStorage.removeItem(KEY); } catch {}
 };

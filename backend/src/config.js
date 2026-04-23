@@ -13,6 +13,8 @@ export const config = {
   port: Number(process.env.PORT || 4000),
   nodeEnv: process.env.NODE_ENV || "development",
   databaseUrl: process.env.DATABASE_URL,
+  dbSsl: process.env.DB_SSL === "true" ? true : process.env.DB_SSL === "false" ? false : undefined,
+  dbSslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false",
   jwtSecret: process.env.JWT_SECRET || "dev_fallback_secret_change_in_production",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:5173",

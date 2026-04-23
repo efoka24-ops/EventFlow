@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { query } from "../db.js";
-import { requireAdmin } from "../middlewares/auth.js";
+import { requireAdmin, requireAuth } from "../middlewares/auth.js";
 import { httpError } from "../utils/httpError.js";
 import { buildWhereClause, parseLimit, parseSort } from "../utils/queryHelpers.js";
 
@@ -82,6 +82,30 @@ router.get("/", async (req, res, next) => {
   }
 });
 
+router.get("/mine/list", requireAuth, async (req, res, next) => {
+  try {
+    const email = String(req.user?.email || "").trim().toLowerCase();
+    const phone = String(req.user?.phone || "").trim();
+
+    if (!email && !phone) {
+      return res.json([]);
+    }
+
+    const result = await query(
+      `SELECT *
+       FROM events
+       WHERE submitted_by_user = true
+         AND ((LOWER(organizer_email) = LOWER($1) AND $1 <> '') OR (organizer_phone = $2 AND $2 <> ''))
+       ORDER BY created_date DESC`,
+      [email, phone]
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get("/:id", async (req, res, next) => {
   try {
     const result = await query("SELECT * FROM events WHERE id = $1", [req.params.id]);
@@ -92,9 +116,19 @@ router.get("/:id", async (req, res, next) => {
   }
 });
 
-router.post("/", async (req, res, next) => {
+router.post("/", requireAuth, async (req, res, next) => {
   try {
     const payload = createEventSchema.parse(req.body);
+    if (req.user?.role !== "admin") {
+      const accountEmail = String(req.user?.email || "").trim().toLowerCase();
+      const accountPhone = String(req.user?.phone || "").trim();
+      if (!accountEmail || !accountPhone) {
+        return next(httpError(400, "A valid account with email and phone is required"));
+      }
+      payload.organizer_email = accountEmail;
+      payload.organizer_phone = accountPhone;
+      payload.submitted_by_user = true;
+    }
     const fields = Object.keys(payload).filter((k) => payload[k] !== undefined && payload[k] !== "");
     const columns = fields.join(", ");
     const placeholders = fields.map((_, i) => `$${i + 1}`).join(", ");

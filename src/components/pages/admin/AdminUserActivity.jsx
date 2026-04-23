@@ -1,6 +1,8 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { listUserActions, listSiteSessions } from "@/api/analyticsApi";
+import { listEvents } from "@/api/eventsApi";
+import { listRegistrations } from "@/api/registrationsApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,27 +34,27 @@ export default function AdminUserActivity() {
 
   const { data: actions = [], refetch: refetchActions } = useQuery({
     queryKey: ["admin-user-actions"],
-    queryFn: () => base44.entities.UserAction.list("-created_date"),
+    queryFn: () => listUserActions({ sort: "-created_date" }),
     refetchOnMount: "always",
     refetchInterval: 15000,
   });
 
   const { data: sessions = [], refetch: refetchSessions } = useQuery({
     queryKey: ["admin-site-sessions"],
-    queryFn: () => base44.entities.SiteSession.list("-started_at"),
+    queryFn: () => listSiteSessions({ sort: "-started_at" }),
     refetchOnMount: "always",
     refetchInterval: 15000,
   });
 
   const { data: events = [] } = useQuery({
     queryKey: ["admin-events"],
-    queryFn: () => base44.entities.Event.list("-created_date"),
+    queryFn: () => listEvents({ sort: "-created_date" }),
     refetchOnMount: "always",
   });
 
   const { data: registrations = [] } = useQuery({
     queryKey: ["admin-registrations"],
-    queryFn: () => base44.entities.Registration.list("-created_date"),
+    queryFn: () => listRegistrations({ sort: "-created_date" }),
     refetchOnMount: "always",
   });
 

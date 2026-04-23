@@ -1,59 +1,36 @@
-const CREATOR_ACCOUNT_ID_KEY = "eventflow_creator_account_id";
-const CREATOR_EMAIL_KEY = "eventflow_creator_email";
-const CREATOR_PHONE_KEY = "eventflow_creator_phone";
+import { tokenStore, decodeJwtPayload } from "@/api/apiClient";
 
-export const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
-
-export const normalizePhone = (phone) => String(phone || "").replace(/[^\d+]/g, "").trim();
-
-export const normalizeIdentifier = (identifier) => {
-  const raw = String(identifier || "").trim();
+export const normalizeEmail = (v) => String(v || "").trim().toLowerCase();
+export const normalizePhone = (v) => String(v || "").replace(/[^\d+]/g, "").trim();
+export const normalizeIdentifier = (v) => {
+  const raw = String(v || "").trim();
   return raw.includes("@") ? normalizeEmail(raw) : normalizePhone(raw);
 };
 
-export const setCreatorAccountId = (id) => {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(CREATOR_ACCOUNT_ID_KEY, String(id || ""));
-};
-
-export const getCreatorAccountId = () => {
-  if (typeof window === "undefined") return "";
-  return String(window.localStorage.getItem(CREATOR_ACCOUNT_ID_KEY) || "");
-};
-
-export const clearCreatorAccountId = () => {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(CREATOR_ACCOUNT_ID_KEY);
-};
-
-export const setCreatorIdentity = ({ email, phone } = {}) => {
-  if (typeof window === "undefined") return;
-  const normalizedEmail = normalizeEmail(email);
-  const normalizedPhone = normalizePhone(phone);
-  if (normalizedEmail) {
-    window.localStorage.setItem(CREATOR_EMAIL_KEY, normalizedEmail);
-  } else {
-    window.localStorage.removeItem(CREATOR_EMAIL_KEY);
+const getPayload = () => {
+  const token = tokenStore.getCreatorToken();
+  if (!token) return null;
+  const p = decodeJwtPayload(token);
+  if (!p || p.exp * 1000 < Date.now()) {
+    tokenStore.clearCreatorToken();
+    return null;
   }
-  if (normalizedPhone) {
-    window.localStorage.setItem(CREATOR_PHONE_KEY, normalizedPhone);
-  } else {
-    window.localStorage.removeItem(CREATOR_PHONE_KEY);
+  return p;
+};
+
+export const getCreatorUser = () => getPayload();
+export const getCreatorEmail = () => normalizeEmail(getPayload()?.email || "");
+export const getCreatorPhone = () => normalizePhone(getPayload()?.phone || "");
+export const getCreatorAccountId = () => getPayload()?.sub || "";
+export const clearCreatorSession = () => {
+  tokenStore.clearCreatorToken();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event("creator-session-changed"));
   }
 };
 
-export const getCreatorEmail = () => {
-  if (typeof window === "undefined") return "";
-  return normalizeEmail(window.localStorage.getItem(CREATOR_EMAIL_KEY) || "");
-};
-
-export const getCreatorPhone = () => {
-  if (typeof window === "undefined") return "";
-  return normalizePhone(window.localStorage.getItem(CREATOR_PHONE_KEY) || "");
-};
-
-export const clearCreatorIdentity = () => {
-  if (typeof window === "undefined") return;
-  window.localStorage.removeItem(CREATOR_EMAIL_KEY);
-  window.localStorage.removeItem(CREATOR_PHONE_KEY);
-};
+// Legacy aliases kept for backward compat during migration
+export const setCreatorAccountId = () => {};
+export const setCreatorIdentity = () => {};
+export const clearCreatorAccountId = clearCreatorSession;
+export const clearCreatorIdentity = () => {};

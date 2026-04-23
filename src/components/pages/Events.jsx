@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { base44 } from "@/api/base44Client";
+import { listEvents } from "@/api/eventsApi";
 import { useQuery } from "@tanstack/react-query";
 import EventCard from "@/components/events/EventCard";
 import EventFilters from "@/components/events/EventFilters";
@@ -17,7 +17,7 @@ export default function Events() {
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["events"],
-    queryFn: () => base44.entities.Event.filter({ status: "publie" }, "-date_start"),
+    queryFn: () => listEvents({ status: "publie", sort: "-date_start" }),
     refetchOnMount: "always",
   });
 

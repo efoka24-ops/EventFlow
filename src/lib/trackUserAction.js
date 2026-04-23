@@ -1,4 +1,4 @@
-import { base44 } from "@/api/base44Client";
+import { createUserAction } from "@/api/analyticsApi";
 import { getParticipantEmail } from "@/lib/participantSession";
 
 export const trackUserAction = async (payload = {}) => {
@@ -17,7 +17,7 @@ export const trackUserAction = async (payload = {}) => {
   };
 
   try {
-    await base44.entities.UserAction.create(actionPayload);
+    await createUserAction(actionPayload);
   } catch {
     // no-op: tracking must never break UX
   }

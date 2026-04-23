@@ -1,18 +1,19 @@
-import React, { useState, useEffect, useRef } from "react";
-import { base44 } from "@/api/base44Client";
+import { useState, useEffect, useRef } from "react";
+import { createRegistration } from "@/api/registrationsApi";
+import { getCreatorUser } from "@/lib/creatorSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Mail, FileText, Loader2, CheckCircle2, User, Download, Smartphone, AlertCircle, Clock, ExternalLink } from "lucide-react";
+import { Mail, Loader2, CheckCircle2, User, Download, Smartphone, AlertCircle, Clock, ExternalLink } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { generateTicketPDF } from "@/utils/generateTicket";
-import { normalizeParticipantEmail, setParticipantEmail } from "@/lib/participantSession";
+import { normalizeParticipantEmail } from "@/lib/participantSession";
 import { trackUserAction } from "@/lib/trackUserAction";
 
 const isGmailEmail = (email) => /@gmail\.com$/i.test((email || "").trim());
@@ -87,10 +88,9 @@ const collectPaymentWithFallback = async (payload) => {
 
 export default function RegistrationForm({ event, onSuccess }) {
   const [currentUser, setCurrentUser] = useState(null);
-  const [userLoading, setUserLoading] = useState(true);
-  const [method, setMethod] = useState(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [showTicketsPrompt, setShowTicketsPrompt] = useState(false);
   const [savedRegistration, setSavedRegistration] = useState(null);
   const [ticketLoading, setTicketLoading] = useState(false);
 
@@ -135,6 +135,7 @@ export default function RegistrationForm({ event, onSuccess }) {
           });
           toast.success("Paiement confirmé ! Inscription validée.");
           setSuccess(true);
+          setShowTicketsPrompt(true);
           if (onSuccess) onSuccess();
         } else if (status === "failed") {
           stopPolling();
@@ -218,12 +219,12 @@ export default function RegistrationForm({ event, onSuccess }) {
     email: "",
     phone: "",
     gender: "",
-    age: "",
   });
 
   useEffect(() => {
-    base44.auth.me()
+    Promise.resolve(getCreatorUser())
       .then((user) => {
+        if (!user) throw new Error("no user");
         setCurrentUser(user);
         const nameParts = (user.full_name || "").split(" ");
         const nextEmail = user.email || "";
@@ -233,12 +234,10 @@ export default function RegistrationForm({ event, onSuccess }) {
           last_name: nameParts.slice(1).join(" ") || "",
           email: nextEmail,
         }));
-        setMethod(isGmailEmail(nextEmail) ? "email_auto" : "formulaire");
       })
       .catch(() => {
-        setMethod("formulaire");
-      })
-      .finally(() => setUserLoading(false));
+        // Keep anonymous users on the single registration form.
+      });
   }, []);
 
   useEffect(() => {
@@ -321,7 +320,6 @@ export default function RegistrationForm({ event, onSuccess }) {
         email: normalizeParticipantEmail(formData.email) || undefined,
         phone: formData.phone || undefined,
         gender: formData.gender || undefined,
-        age: formData.age ? Number(formData.age) : undefined,
         geo_latitude: geo.latitude,
         geo_longitude: geo.longitude,
         geo_accuracy: geo.accuracy,
@@ -332,16 +330,13 @@ export default function RegistrationForm({ event, onSuccess }) {
         email_provider: emailProvider,
         has_gmail_account: hasGmailAccount,
         status: isPaidEvent ? "en_attente_paiement" : "en_attente",
-        registration_method: method,
+        registration_method: "formulaire",
       };
 
-      const created = await base44.entities.Registration.create(registrationData);
+      const created = await createRegistration(registrationData);
       const reg = created || { ...registrationData, id: Date.now().toString(), created_date: new Date().toISOString() };
       setSavedRegistration(reg);
 
-      if (registrationData.email) {
-        setParticipantEmail(registrationData.email);
-      }
       trackUserAction({
         action: "event_registration_created",
         user_email: registrationData.email,
@@ -358,6 +353,7 @@ export default function RegistrationForm({ event, onSuccess }) {
         toast.info(`Événement payant — ${paymentAmount.toLocaleString()} FCFA. Procédez au paiement.`);
       } else {
         setSuccess(true);
+        setShowTicketsPrompt(true);
         toast.success("Inscription envoyée avec succès !");
         if (onSuccess) onSuccess();
       }
@@ -372,6 +368,29 @@ export default function RegistrationForm({ event, onSuccess }) {
   const emailProvider = detectEmailProvider(formData.email);
   const hasGmailAccount = isGmailEmail(formData.email) || isGmailEmail(currentUser?.email);
 
+  if (!currentUser) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Compte requis pour s'inscrire</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Vous pouvez consulter tous les evenements, mais l'inscription exige un compte.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Link to="/submit-event?auth=login">
+              <Button className="w-full" variant="outline">Se connecter</Button>
+            </Link>
+            <Link to="/submit-event?auth=signup">
+              <Button className="w-full">Creer un compte</Button>
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (paymentStep && !success) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
@@ -383,6 +402,9 @@ export default function RegistrationForm({ event, onSuccess }) {
                 <Smartphone className="w-4 h-4 text-primary" />
                 Paiement – {paymentAmount.toLocaleString()} FCFA
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Fenetre de paiement securise pour finaliser l'inscription.
+              </DialogDescription>
               <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-muted-foreground flex items-center gap-1 hover:text-primary">
                 <ExternalLink className="w-3 h-3" /> Ouvrir dans un onglet
               </a>
@@ -488,6 +510,38 @@ export default function RegistrationForm({ event, onSuccess }) {
 
     return (
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+        <Dialog open={showTicketsPrompt} onOpenChange={setShowTicketsPrompt}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Inscription terminee</DialogTitle>
+              <DialogDescription>
+                Choisissez l'action suivante: consulter vos billets ou acceder a la connexion/creation de compte.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                {currentUser
+                  ? "Voulez-vous consulter maintenant le statut de votre billet ?"
+                  : "Pour voir vos billets, connectez-vous ou creez votre compte."}
+              </p>
+              {currentUser ? (
+                <Link to="/participant/tickets" className="block" onClick={() => setShowTicketsPrompt(false)}>
+                  <Button className="w-full">Voir mes billets</Button>
+                </Link>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Link to="/submit-event?auth=login" className="block" onClick={() => setShowTicketsPrompt(false)}>
+                    <Button className="w-full" variant="outline">Se connecter</Button>
+                  </Link>
+                  <Link to="/submit-event?auth=signup" className="block" onClick={() => setShowTicketsPrompt(false)}>
+                    <Button className="w-full">Creer un compte</Button>
+                  </Link>
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
         <Card className="py-8">
           <CardContent className="space-y-6">
             <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
@@ -509,11 +563,13 @@ export default function RegistrationForm({ event, onSuccess }) {
               {ticketLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               {ticketLoading ? "Génération du billet..." : "Télécharger mon billet (PDF)"}
             </Button>
-            <Link to="/participant/tickets" className="block">
-              <Button className="w-full" variant="secondary">
-                Voir le statut de mon billet
-              </Button>
-            </Link>
+            {currentUser && (
+              <Link to="/participant/tickets" className="block">
+                <Button className="w-full" variant="secondary">
+                  Voir le statut de mon billet
+                </Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
       </motion.div>
@@ -549,112 +605,50 @@ export default function RegistrationForm({ event, onSuccess }) {
           )}
         </div>
 
-        <div className="flex gap-2">
-          {(currentUser || hasGmailAccount) && (
-            <button
-              type="button"
-              onClick={() => setMethod("email_auto")}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
-                method === "email_auto"
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-card border-border text-muted-foreground hover:border-primary/40"
-              }`}
-            >
-              <Mail className="w-4 h-4" /> Inscription rapide
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setMethod("formulaire")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
-              method === "formulaire"
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-card border-border text-muted-foreground hover:border-primary/40"
-            }`}
-          >
-            <FileText className="w-4 h-4" /> Formulaire complet
-          </button>
-        </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
-          {method === "email_auto" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Prénom *</Label>
-                  <Input required value={formData.first_name} onChange={(e) => handleChange("first_name", e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Nom *</Label>
-                  <Input required value={formData.last_name} onChange={(e) => handleChange("last_name", e.target.value)} />
-                </div>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Prénom *</Label>
+                <Input required value={formData.first_name} onChange={(e) => handleChange("first_name", e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Email (détecté automatiquement)</Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
-                  className="bg-muted/50"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {hasGmailAccount ? "Adresse Gmail détectée automatiquement" : "Email pré-rempli depuis votre compte connecté"}
-                </p>
+                <Label>Nom *</Label>
+                <Input required value={formData.last_name} onChange={(e) => handleChange("last_name", e.target.value)} />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleChange("email", e.target.value)}
+                placeholder="optionnel"
+              />
+              {currentUser && (
+                <p className="text-xs text-muted-foreground">
+                  Email pre-rempli depuis votre compte connecte, modifiable si besoin.
+                </p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Téléphone *</Label>
-                <Input
-                  required
-                  type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleChange("phone", e.target.value)}
-                  placeholder="+225 XX XX XX XX"
-                />
-              </div>
-            </div>
-          )}
-
-          {method === "formulaire" && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Prénom *</Label>
-                  <Input required value={formData.first_name} onChange={(e) => handleChange("first_name", e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Nom *</Label>
-                  <Input required value={formData.last_name} onChange={(e) => handleChange("last_name", e.target.value)} />
-                </div>
+                <Input required type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} placeholder="+225 XX XX XX XX" />
               </div>
               <div className="space-y-1.5">
-                <Label>Email</Label>
-                <Input type="email" value={formData.email} onChange={(e) => handleChange("email", e.target.value)} placeholder="optionnel" />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Téléphone *</Label>
-                  <Input required type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} placeholder="+225 XX XX XX XX" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Genre</Label>
-                  <Select value={formData.gender} onValueChange={(v) => handleChange("gender", v)}>
-                    <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="homme">Homme</SelectItem>
-                      <SelectItem value="femme">Femme</SelectItem>
-                      <SelectItem value="autre">Autre</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Âge</Label>
-                  <Input type="number" value={formData.age} onChange={(e) => handleChange("age", e.target.value)} />
-                </div>
+                <Label>Genre</Label>
+                <Select value={formData.gender} onValueChange={(v) => handleChange("gender", v)}>
+                  <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="homme">Homme</SelectItem>
+                    <SelectItem value="femme">Femme</SelectItem>
+                    <SelectItem value="autre">Autre</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
-          )}
+          </div>
 
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
             {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}

@@ -1,6 +1,5 @@
-import React from "react";
 import { useParams, Link } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { listEvents, getEvent } from "@/api/eventsApi";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +27,7 @@ export default function EventDetail() {
   const { data: event, isLoading } = useQuery({
     queryKey: ["event", id],
     queryFn: async () => {
-      const events = await base44.entities.Event.filter({ id });
+      const events = [await getEvent(id)];
       return events[0];
     },
     refetchOnMount: "always",

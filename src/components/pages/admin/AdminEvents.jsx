@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { useState } from "react";
+import { listEvents, deleteEvent } from "@/api/eventsApi";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -32,13 +32,13 @@ export default function AdminEvents() {
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["admin-events"],
-    queryFn: () => base44.entities.Event.list("-created_date"),
+    queryFn: () => listEvents({ sort: "-created_date" }),
     refetchOnMount: "always",
   });
 
   const handleDelete = async () => {
     const deletedEventId = deleteId;
-    await base44.entities.Event.delete(deletedEventId);
+    await deleteEvent(deletedEventId);
 
     // Ensure all event-related screens reflect deletion immediately.
     queryClient.setQueryData(["admin-events"], (prev = []) => prev.filter((item) => item.id !== deletedEventId));

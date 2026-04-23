@@ -1,5 +1,5 @@
 {
-  "name": "base44-app",
+  "name": "eventflow-app",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "test": "vitest run",
+    "test:e2e:frontend": "playwright test",
     "test:unit": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . --quiet",
@@ -84,6 +85,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "@eslint/js": "^9.19.0",
     "@types/node": "^22.13.5",
     "@types/react": "^18.2.66",

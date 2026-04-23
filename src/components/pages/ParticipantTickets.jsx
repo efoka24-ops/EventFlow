@@ -1,41 +1,36 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { listRegistrations } from "@/api/registrationsApi";
+import { listEvents } from "@/api/eventsApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { REGISTRATION_STATUS } from "@/lib/constants";
-import {
-  clearParticipantEmail,
-  getParticipantEmail,
-  normalizeParticipantEmail,
-  setParticipantEmail,
-} from "@/lib/participantSession";
+import { getCreatorEmail, getCreatorUser } from "@/lib/creatorSession";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Loader2, Mail, RefreshCcw, Ticket } from "lucide-react";
+import { Loader2, RefreshCcw, Ticket } from "lucide-react";
 import { toast } from "sonner";
 import { generateTicketPDF } from "@/utils/generateTicket";
 import { trackUserAction } from "@/lib/trackUserAction";
+import { Link } from "react-router-dom";
 
 export default function ParticipantTickets() {
-  const [emailInput, setEmailInput] = useState(getParticipantEmail());
-  const [participantEmail, setParticipantEmailState] = useState(getParticipantEmail());
+  const creatorUser = getCreatorUser();
+  const participantEmail = getCreatorEmail();
   const [ticketLoadingId, setTicketLoadingId] = useState(null);
 
   const { data: registrations = [], isLoading, refetch } = useQuery({
     queryKey: ["participant-registrations", participantEmail],
     enabled: Boolean(participantEmail),
-    queryFn: () => base44.entities.Registration.filter({ email: participantEmail }, "-updated_date"),
+    queryFn: () => listRegistrations({ email: participantEmail, sort: "-updated_date" }),
     refetchOnMount: "always",
     refetchInterval: 20000,
   });
 
   const { data: events = [] } = useQuery({
     queryKey: ["events"],
-    queryFn: () => base44.entities.Event.list(),
+    queryFn: () => listEvents(),
     enabled: Boolean(participantEmail),
     refetchOnMount: "always",
   });
@@ -45,24 +40,26 @@ export default function ParticipantTickets() {
     [events]
   );
 
-  const loginWithEmail = () => {
-    const normalized = normalizeParticipantEmail(emailInput);
-    if (!normalized || !normalized.includes("@")) {
-      toast.error("Saisissez une adresse email valide.");
-      return;
-    }
-    setParticipantEmail(normalized);
-    setParticipantEmailState(normalized);
-    setEmailInput(normalized);
-    trackUserAction({ action: "participant_login", user_email: normalized, context: "participant_tickets" });
-    toast.success("Connexion participant réussie");
-  };
-
-  const logoutParticipant = () => {
-    clearParticipantEmail();
-    setParticipantEmailState("");
-    setEmailInput("");
-  };
+  if (!creatorUser) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        <Card>
+          <CardHeader>
+            <CardTitle>Connexion requise</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Pour consulter vos billets, connectez-vous ou creez votre compte.
+              L'inscription du compte exige un email et un numero de telephone.
+            </p>
+            <Link to="/submit-event" className="inline-block">
+              <Button>Se connecter ou creer un compte</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const handleDownloadTicket = async (registration) => {
     const event = eventsById[registration.event_id];
@@ -98,29 +95,7 @@ export default function ParticipantTickets() {
         </p>
       </div>
 
-      {!participantEmail ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Connexion participant</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="participant-email">Adresse email</Label>
-              <Input
-                id="participant-email"
-                type="email"
-                value={emailInput}
-                placeholder="vous@exemple.com"
-                onChange={(e) => setEmailInput(e.target.value)}
-              />
-            </div>
-            <Button onClick={loginWithEmail} className="w-full sm:w-auto gap-2">
-              <Mail className="w-4 h-4" />
-              Accéder à mes billets
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
+      {participantEmail ? (
         <>
           <Card>
             <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -133,7 +108,6 @@ export default function ParticipantTickets() {
                   <RefreshCcw className="w-4 h-4" />
                   Actualiser
                 </Button>
-                <Button variant="ghost" onClick={logoutParticipant}>Changer d'email</Button>
               </div>
             </CardContent>
           </Card>
@@ -228,6 +202,15 @@ export default function ParticipantTickets() {
             )}
           </div>
         </>
+      ) : (
+        <Card>
+          <CardContent className="py-10 text-center space-y-2">
+            <p className="font-semibold">Email de compte manquant</p>
+            <p className="text-sm text-muted-foreground">
+              Votre compte est connecte mais ne contient pas d'email. Connectez-vous avec un compte ayant un email.
+            </p>
+          </CardContent>
+        </Card>
       )}
     </div>
   );
