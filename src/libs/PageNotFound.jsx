@@ -1,5 +1,5 @@
 import { useLocation } from 'react-router-dom';
-import { useAuth } from '@/lib/AuthContext';
+import { useAuth } from '@/libs/AuthContext';
 
 
 export default function PageNotFound({}) {

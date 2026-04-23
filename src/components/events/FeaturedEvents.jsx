@@ -1,5 +1,4 @@
-import React from "react";
-import { base44 } from "@/api/base44Client";
+import { listEvents } from "@/api/eventsApi";
 import { useQuery } from "@tanstack/react-query";
 import EventCard from "./EventCard";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export default function FeaturedEvents() {
   const { data: events = [], isLoading } = useQuery({
     queryKey: ["featured-events"],
-    queryFn: () => base44.entities.Event.filter({ status: "publie" }, "-created_date", 6),
+    queryFn: () => listEvents({ status: "publie", sort: "-created_date", limit: 6 }),
     refetchOnMount: "always",
   });
 

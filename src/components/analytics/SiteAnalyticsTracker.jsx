@@ -1,11 +1,12 @@
 import { useEffect, useMemo } from "react";
 import { useLocation } from "react-router-dom";
-import { base44 } from "@/api/base44Client";
+import { upsertSessionHeartbeat } from "@/api/analyticsApi";
 import { trackUserAction } from "@/lib/trackUserAction";
 import { getParticipantEmail } from "@/lib/participantSession";
 import { getCreatorEmail, getCreatorPhone } from "@/lib/creatorSession";
 
 const SESSION_ID_KEY = "eventflow_site_session_id";
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const getBrowserName = (userAgent) => {
   const ua = String(userAgent || "").toLowerCase();
@@ -56,10 +57,12 @@ const getDeviceType = (userAgent) => {
 const getOrCreateSessionId = () => {
   if (typeof window === "undefined") return `ssr-${Date.now()}`;
   const existing = window.sessionStorage.getItem(SESSION_ID_KEY);
-  if (existing) return existing;
+  if (existing && UUID_REGEX.test(existing)) return existing;
   const next = typeof crypto !== "undefined" && crypto.randomUUID
     ? crypto.randomUUID()
-    : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    : "00000000-0000-4000-8000-000000000000".replace(/[08]/g, (c) =>
+        (Number(c) ^ (Math.random() * 16 >> (Number(c) / 4))).toString(16)
+      );
   window.sessionStorage.setItem(SESSION_ID_KEY, next);
   return next;
 };
@@ -85,7 +88,7 @@ export default function SiteAnalyticsTracker() {
     const browserName = getBrowserName(userAgent);
     const browserVersion = getBrowserVersion(userAgent);
 
-    base44.entities.SiteSession.upsertHeartbeat(sessionId, {
+    upsertSessionHeartbeat(sessionId, {
       started_at: startedAt,
       last_seen_at: startedAt,
       is_active: true,
@@ -108,7 +111,7 @@ export default function SiteAnalyticsTracker() {
       .then((response) => (response.ok ? response.json() : null))
       .then((geo) => {
         if (!geo) return;
-        return base44.entities.SiteSession.upsertHeartbeat(sessionId, {
+        return upsertSessionHeartbeat(sessionId, {
           country: geo.country_name || geo.country || null,
           city: geo.city || null,
           region: geo.region || null,
@@ -123,7 +126,7 @@ export default function SiteAnalyticsTracker() {
       geoWatchId = navigator.geolocation.watchPosition(
         (position) => {
           const coords = position.coords || {};
-          base44.entities.SiteSession.upsertHeartbeat(sessionId, {
+          upsertSessionHeartbeat(sessionId, {
             geo_source: "device",
             geo_latitude: coords.latitude ?? null,
             geo_longitude: coords.longitude ?? null,
@@ -147,7 +150,7 @@ export default function SiteAnalyticsTracker() {
     }
 
     const interval = setInterval(() => {
-      base44.entities.SiteSession.upsertHeartbeat(sessionId, {
+      upsertSessionHeartbeat(sessionId, {
         last_seen_at: new Date().toISOString(),
         is_active: true,
         ...getIdentityPayload(),
@@ -156,7 +159,7 @@ export default function SiteAnalyticsTracker() {
 
     const onHidden = () => {
       if (document.visibilityState === "hidden") {
-        base44.entities.SiteSession.upsertHeartbeat(sessionId, {
+        upsertSessionHeartbeat(sessionId, {
           last_seen_at: new Date().toISOString(),
           is_active: false,
           ...getIdentityPayload(),
@@ -175,7 +178,7 @@ export default function SiteAnalyticsTracker() {
   }, [sessionId]);
 
   useEffect(() => {
-    base44.entities.SiteSession.upsertHeartbeat(sessionId, {
+    upsertSessionHeartbeat(sessionId, {
       last_seen_at: new Date().toISOString(),
       is_active: true,
       page_path: location.pathname,

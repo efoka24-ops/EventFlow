@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { listHelpArticles, createHelpArticle, updateHelpArticle, deleteHelpArticle } from "@/api/helpArticlesApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -28,7 +28,7 @@ export default function AdminHelp() {
 
   const { data: articles = [], isLoading } = useQuery({
     queryKey: ["admin-help-articles"],
-    queryFn: () => base44.entities.HelpArticle.list("topic_order"),
+    queryFn: () => listHelpArticles("topic_order"),
     refetchOnMount: "always",
   });
 
@@ -104,10 +104,10 @@ export default function AdminHelp() {
       }
 
       if (editingId) {
-        await base44.entities.HelpArticle.update(editingId, payload);
+        await updateHelpArticle(editingId, payload);
         toast.success("Article d'aide mis à jour");
       } else {
-        await base44.entities.HelpArticle.create(payload);
+        await createHelpArticle(payload);
         toast.success("Article d'aide ajouté");
       }
 
@@ -122,7 +122,7 @@ export default function AdminHelp() {
 
   const handleDelete = async (id) => {
     try {
-      await base44.entities.HelpArticle.delete(id);
+      await deleteHelpArticle(id);
       refreshQueries();
       toast.success("Article supprimé");
       if (editingId === id) resetForm();

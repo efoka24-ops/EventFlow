@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Loader2, RefreshCw, Search, Eye, CheckCircle2, XCircle, Clock, CreditCard } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -214,6 +214,9 @@ export default function AdminPayments() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Détail du paiement</DialogTitle>
+            <DialogDescription>
+              Informations detaillees du paiement selectionne.
+            </DialogDescription>
           </DialogHeader>
           {selected && (
             <div className="space-y-3 text-sm">

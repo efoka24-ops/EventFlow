@@ -4,9 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nodemon --watch src --ext js,json --delay 300ms src/server.js",
-    "start": "node src/server.js",
-    "db:init": "node src/scripts/initDb.js"
+    "dev": "node src/scripts/bootstrapDb.js && nodemon --watch src --ext js,json --delay 300ms src/server.js",
+    "start": "node src/scripts/bootstrapDb.js && node src/server.js",
+    "db:init": "node src/scripts/initDb.js",
+    "db:migrate": "node src/scripts/migrateDb.js",
+    "db:seed-admin": "node src/scripts/seedAdmin.js",
+    "db:bootstrap": "node src/scripts/bootstrapDb.js",
+    "test:e2e:business": "node src/scripts/e2eBusinessTest.js",
+    "test:e2e:security": "node src/scripts/e2eSecurityTest.js",
+    "test:e2e:load": "node src/scripts/e2eLoadTest.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { listHelpArticles } from "@/api/helpArticlesApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ export default function Help() {
   const [search, setSearch] = useState("");
   const { data: articles = [], isLoading } = useQuery({
     queryKey: ["help-articles"],
-    queryFn: () => base44.entities.HelpArticle.list("topic_order"),
+    queryFn: () => listHelpArticles("topic_order"),
     refetchOnMount: "always",
   });
 

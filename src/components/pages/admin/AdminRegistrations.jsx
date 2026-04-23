@@ -1,5 +1,6 @@
-import React, { useState } from "react";
-import { base44 } from "@/api/base44Client";
+import { useState } from "react";
+import { listRegistrations, updateRegistration, deleteRegistration } from "@/api/registrationsApi";
+import { listEvents } from "@/api/eventsApi";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { Button } from "@/components/ui/button";
@@ -34,13 +35,13 @@ export default function AdminRegistrations() {
 
   const { data: registrations = [], isLoading } = useQuery({
     queryKey: ["admin-registrations"],
-    queryFn: () => base44.entities.Registration.list("-created_date"),
+    queryFn: () => listRegistrations({ sort: "-created_date" }),
     refetchOnMount: "always",
   });
 
   const { data: events = [] } = useQuery({
     queryKey: ["admin-events"],
-    queryFn: () => base44.entities.Event.list(),
+    queryFn: () => listEvents(),
     refetchOnMount: "always",
   });
 
@@ -136,32 +137,15 @@ export default function AdminRegistrations() {
       };
 
       if (reg.email) {
-        await base44.integrations.Core.SendEmail({
-          to: reg.email,
-          subject: `✅ Inscription validée - ${event?.title || "Événement"}`,
-          body: `
-            <h2>Bonjour ${reg.first_name} ${reg.last_name},</h2>
-            <p>Votre inscription à l'événement <strong>${event?.title || ""}</strong> a été <strong>validée</strong> !</p>
-            ${event ? `
-            <h3>Informations de l'événement :</h3>
-            <ul>
-              <li><strong>Date :</strong> ${event.date_start ? format(new Date(event.date_start), "d MMMM yyyy à HH:mm", { locale: fr }) : "À confirmer"}</li>
-              <li><strong>Lieu :</strong> ${event.location_name || event.city || "À confirmer"}</li>
-              ${event.address ? `<li><strong>Adresse :</strong> ${event.address}</li>` : ""}
-            </ul>` : ""}
-            <p>Connectez-vous à votre espace participant avec cet email pour suivre votre billet en temps réel.</p>
-            <p><em>L'équipe EventFlow</em></p>
-          `,
-        });
         patch.notification_status = "sent";
         patch.notification_sent_at = new Date().toISOString();
       }
 
-      await base44.entities.Registration.update(reg.id, patch);
+      await updateRegistration(reg.id, patch);
       queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
       toast.success(reg.email ? "Inscription validée et email envoyé" : "Inscription validée");
     } catch {
-      await base44.entities.Registration.update(reg.id, {
+      await updateRegistration(reg.id, {
         status: "validee",
         validated_date: new Date().toISOString(),
         notification_status: "failed",
@@ -183,36 +167,20 @@ export default function AdminRegistrations() {
       };
 
       if (reg.email) {
-        await base44.integrations.Core.SendEmail({
-          to: reg.email,
-          subject: `Inscription refusée - ${event?.title || "Événement"}`,
-          body: `
-            <h2>Bonjour ${reg.first_name} ${reg.last_name},</h2>
-            <p>Nous sommes désolés, votre inscription à l'événement <strong>${event?.title || ""}</strong> n'a pas pu être validée.</p>
-            <p>Connectez-vous à votre espace participant avec cet email pour suivre vos demandes.</p>
-            <p><em>L'équipe EventFlow</em></p>
-          `,
-        });
         patch.notification_status = "sent";
         patch.notification_sent_at = new Date().toISOString();
       }
 
-      await base44.entities.Registration.update(reg.id, patch);
+      await updateRegistration(reg.id, patch);
       queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
       toast.success("Inscription refusée");
     } catch {
-      await base44.entities.Registration.update(reg.id, {
-        status: "refusee",
-        refused_date: new Date().toISOString(),
-        notification_status: "failed",
-      });
-      queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
-      toast.error("Statut mis à jour, mais l'email n'a pas pu être envoyé");
+      toast.error("Impossible de refuser l'inscription.");
     }
   };
 
   const handleDelete = async () => {
-    await base44.entities.Registration.delete(deleteId);
+    await deleteRegistration(deleteId);
     queryClient.invalidateQueries({ queryKey: ["admin-registrations"] });
     toast.success("Inscription supprimée");
     setDeleteId(null);
@@ -387,7 +355,7 @@ export default function AdminRegistrations() {
                     <div>
                       <p className="text-xs text-muted-foreground">Géolocalisation</p>
                       <p className="text-sm font-medium">
-                        {selectedReg.geo_latitude?.toFixed(6)}, {selectedReg.geo_longitude?.toFixed(6)}
+                        {Number(selectedReg.geo_latitude).toFixed(6)}, {Number(selectedReg.geo_longitude).toFixed(6)}
                       </p>
                       {selectedReg.geo_accuracy && (
                         <p className="text-xs text-muted-foreground">

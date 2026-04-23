@@ -1,5 +1,6 @@
-import React from "react";
-import { base44 } from "@/api/base44Client";
+import { listEvents } from "@/api/eventsApi";
+import { listRegistrations } from "@/api/registrationsApi";
+import { listSiteSessions, listEventFeedback } from "@/api/analyticsApi";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,25 +33,25 @@ const downloadBlob = (content, fileName, type) => {
 export default function Dashboard() {
   const { data: events = [] } = useQuery({
     queryKey: ["admin-events"],
-    queryFn: () => base44.entities.Event.list("-created_date"),
+    queryFn: () => listEvents({ sort: "-created_date" }),
   });
 
   const { data: registrations = [] } = useQuery({
     queryKey: ["admin-registrations"],
-    queryFn: () => base44.entities.Registration.list("-created_date"),
+    queryFn: () => listRegistrations({ sort: "-created_date" }),
     refetchInterval: 30_000,
     refetchOnMount: "always",
   });
 
   const { data: sessions = [] } = useQuery({
     queryKey: ["admin-site-sessions"],
-    queryFn: () => base44.entities.SiteSession.list("-started_at"),
+    queryFn: () => listSiteSessions({ sort: "-started_at" }),
     refetchOnMount: "always",
   });
 
   const { data: feedbackItems = [] } = useQuery({
     queryKey: ["admin-feedback"],
-    queryFn: () => base44.entities.EventFeedback.list("-created_date"),
+    queryFn: () => listEventFeedback({ sort: "-created_date" }),
     refetchOnMount: "always",
   });
 

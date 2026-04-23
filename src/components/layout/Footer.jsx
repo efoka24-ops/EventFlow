@@ -15,7 +15,7 @@ export default function Footer() {
               <span className="text-lg font-bold tracking-tight">EventFlow</span>
             </div>
             <p className="text-sm text-muted-foreground max-w-sm">
-              Plateforme de gestion d'evenements avec inscription, suivi des participants et pilotage admin.
+              Plateforme de gestion d'evenements
             </p>
           </div>
 

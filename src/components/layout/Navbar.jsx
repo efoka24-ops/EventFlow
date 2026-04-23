@@ -1,9 +1,10 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Menu, X, Shield, Ticket, PlusSquare, CircleHelp } from "lucide-react";
+import { CalendarDays, Menu, X, Shield, Ticket, CircleHelp, LayoutDashboard, Briefcase } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useAuth } from "@/lib/AuthContext";
+import { useAuth } from "@/libs/AuthContext";
+import { getCreatorUser } from "@/lib/creatorSession";
 
 const isAdminUser = (user) => {
   if (!user) return false;
@@ -20,7 +21,23 @@ export default function Navbar() {
   const location = useLocation();
   const { user } = useAuth();
   const canSeeAdmin = isAdminUser(user);
+  const [isCreatorConnected, setIsCreatorConnected] = useState(Boolean(getCreatorUser()));
   const isAdmin = location.pathname.startsWith("/admin");
+
+  useEffect(() => {
+    const refreshCreatorState = () => setIsCreatorConnected(Boolean(getCreatorUser()));
+
+    refreshCreatorState();
+    window.addEventListener("creator-session-changed", refreshCreatorState);
+    window.addEventListener("storage", refreshCreatorState);
+    window.addEventListener("focus", refreshCreatorState);
+
+    return () => {
+      window.removeEventListener("creator-session-changed", refreshCreatorState);
+      window.removeEventListener("storage", refreshCreatorState);
+      window.removeEventListener("focus", refreshCreatorState);
+    };
+  }, []);
 
   return (
     <nav className="sticky top-0 z-50 bg-card/80 backdrop-blur-xl border-b border-border/50">
@@ -44,22 +61,34 @@ export default function Navbar() {
                 Événements
               </Button>
             </Link>
-            <Link to="/participant/tickets">
-              <Button variant={location.pathname.startsWith("/participant") ? "secondary" : "ghost"} size="sm" className="gap-2">
-                <Ticket className="w-3.5 h-3.5" />
-                Mes billets
-              </Button>
-            </Link>
+            {isCreatorConnected && (
+              <Link to="/dashboard">
+                <Button variant={location.pathname === "/dashboard" ? "secondary" : "ghost"} size="sm" className="gap-2">
+                  <LayoutDashboard className="w-3.5 h-3.5" />
+                  Mon espace
+                </Button>
+              </Link>
+            )}
+            {isCreatorConnected && (
+              <Link to="/dashboard/events">
+                <Button variant={location.pathname.startsWith("/dashboard/events") ? "secondary" : "ghost"} size="sm" className="gap-2">
+                  <Briefcase className="w-3.5 h-3.5" />
+                  Mes événements
+                </Button>
+              </Link>
+            )}
+            {isCreatorConnected && (
+              <Link to="/participant/tickets">
+                <Button variant={location.pathname.startsWith("/participant") ? "secondary" : "ghost"} size="sm" className="gap-2">
+                  <Ticket className="w-3.5 h-3.5" />
+                  Mes billets
+                </Button>
+              </Link>
+            )}
             <Link to="/help">
               <Button variant={location.pathname === "/help" ? "secondary" : "ghost"} size="sm" className="gap-2">
                 <CircleHelp className="w-3.5 h-3.5" />
                 Aide
-              </Button>
-            </Link>
-            <Link to="/submit-event">
-              <Button variant={location.pathname === "/submit-event" ? "secondary" : "ghost"} size="sm" className="gap-2">
-                <PlusSquare className="w-3.5 h-3.5" />
-                Proposer
               </Button>
             </Link>
             {canSeeAdmin && (
@@ -101,25 +130,43 @@ export default function Navbar() {
               <Link to="/events" onClick={() => setMobileOpen(false)}>
                 <Button variant="ghost" className="w-full justify-start">Événements</Button>
               </Link>
-              <Link to="/participant/tickets" onClick={() => setMobileOpen(false)}>
-                <Button variant="ghost" className="w-full justify-start gap-2">
-                  <Ticket className="w-3.5 h-3.5" /> Mes billets
-                </Button>
-              </Link>
+              {isCreatorConnected && (
+                <Link to="/dashboard" onClick={() => setMobileOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start gap-2">
+                    <LayoutDashboard className="w-3.5 h-3.5" /> Mon espace
+                  </Button>
+                </Link>
+              )}
+              {isCreatorConnected && (
+                <Link to="/dashboard/events" onClick={() => setMobileOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start gap-2">
+                    <Briefcase className="w-3.5 h-3.5" /> Mes événements
+                  </Button>
+                </Link>
+              )}
+              {isCreatorConnected && (
+                <Link to="/participant/tickets" onClick={() => setMobileOpen(false)}>
+                  <Button variant="ghost" className="w-full justify-start gap-2">
+                    <Ticket className="w-3.5 h-3.5" /> Mes billets
+                  </Button>
+                </Link>
+              )}
               <Link to="/help" onClick={() => setMobileOpen(false)}>
                 <Button variant="ghost" className="w-full justify-start gap-2">
                   <CircleHelp className="w-3.5 h-3.5" /> Aide
-                </Button>
-              </Link>
-              <Link to="/submit-event" onClick={() => setMobileOpen(false)}>
-                <Button variant="ghost" className="w-full justify-start gap-2">
-                  <PlusSquare className="w-3.5 h-3.5" /> Proposer un événement
                 </Button>
               </Link>
               {canSeeAdmin && (
                 <Link to="/admin" onClick={() => setMobileOpen(false)}>
                   <Button variant="outline" className="w-full justify-start gap-2">
                     <Shield className="w-3.5 h-3.5" /> Admin
+                  </Button>
+                </Link>
+              )}
+              {!canSeeAdmin && (
+                <Link to="/admin/login" onClick={() => setMobileOpen(false)}>
+                  <Button variant="outline" className="w-full justify-start gap-2">
+                    <Shield className="w-3.5 h-3.5" /> Connexion admin
                   </Button>
                 </Link>
               )}

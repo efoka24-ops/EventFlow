@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { listEventFeedback, createEventFeedback } from "@/api/analyticsApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ export default function EventFeedbackForm({ event }) {
 
   const { data: feedbackItems = [] } = useQuery({
     queryKey: ["event-feedback", event.id],
-    queryFn: () => base44.entities.EventFeedback.filter({ event_id: event.id }, "-created_date"),
+    queryFn: () => listEventFeedback({ event_id: event.id, sort: "-created_date" }),
     refetchOnMount: "always",
   });
 
@@ -34,7 +34,7 @@ export default function EventFeedbackForm({ event }) {
     e.preventDefault();
     setLoading(true);
     try {
-      await base44.entities.EventFeedback.create({
+      await createEventFeedback({
         event_id: event.id,
         event_title: event.title,
         participant_name: participantName || "Anonyme",

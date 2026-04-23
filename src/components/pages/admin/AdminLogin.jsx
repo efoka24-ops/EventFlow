@@ -1,45 +1,33 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Shield, Loader2 } from "lucide-react";
-import { useAuth } from "@/lib/AuthContext";
+import { useAuth } from "@/libs/AuthContext";
 import { toast } from "sonner";
 
-const isAdminUser = (user) => {
-  if (!user) return false;
-  return Boolean(
-    user.isAdmin ||
-    user.is_admin ||
-    user.role === "admin" ||
-    (Array.isArray(user.roles) && user.roles.includes("admin"))
-  );
-};
-
 export default function AdminLogin() {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { user, loginAsAdmin } = useAuth();
 
-  if (isAdminUser(user)) {
+  if (user?.role === "admin" || user?.isAdmin) {
     return <Navigate to="/admin" replace />;
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-
-    const ok = await loginAsAdmin(password);
+    const ok = await loginAsAdmin(email.trim(), password);
     setLoading(false);
-
     if (!ok) {
-      toast.error("Mot de passe admin invalide");
+      toast.error("Email ou mot de passe admin invalide");
       return;
     }
-
     toast.success("Connexion admin réussie");
     navigate("/admin", { replace: true });
   };
@@ -55,23 +43,33 @@ export default function AdminLogin() {
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
+              <Label htmlFor="admin-email">Email admin</Label>
+              <Input
+                id="admin-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@eventflow.com"
+                required
+                autoComplete="username"
+              />
+            </div>
+            <div className="space-y-1.5">
               <Label htmlFor="admin-password">Mot de passe</Label>
               <Input
                 id="admin-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Entrez le mot de passe admin"
+                placeholder="Mot de passe"
                 required
+                autoComplete="current-password"
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
               {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
               Se connecter
             </Button>
-            <p className="text-xs text-muted-foreground">
-              Mot de passe par défaut: <strong>admin123</strong>
-            </p>
           </form>
         </CardContent>
       </Card>

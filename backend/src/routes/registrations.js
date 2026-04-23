@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { query } from "../db.js";
-import { requireAdmin } from "../middlewares/auth.js";
+import { requireAdmin, requireAuth } from "../middlewares/auth.js";
 import { buildWhereClause, parseLimit, parseSort } from "../utils/queryHelpers.js";
 import { httpError } from "../utils/httpError.js";
 
@@ -14,7 +14,6 @@ const registrationSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
   gender: z.enum(["homme", "femme", "autre"]).optional(),
-  age: z.number().int().nonnegative().optional(),
   id_type: z.enum(["cni", "passeport", "permis", "autre"]).optional(),
   id_number: z.string().optional(),
   geo_latitude: z.number().optional(),
@@ -26,17 +25,33 @@ const registrationSchema = z.object({
   geo_country: z.string().optional(),
   email_provider: z.string().optional(),
   has_gmail_account: z.boolean().optional(),
-  status: z.enum(["en_attente", "validee", "refusee"]).optional(),
+  status: z.enum(["en_attente", "en_attente_paiement", "validee", "refusee"]).optional(),
   registration_method: z.enum(["email_auto", "formulaire"]).optional(),
 });
 
-router.get("/", async (req, res, next) => {
+router.get("/", requireAuth, async (req, res, next) => {
   try {
     const { sort, limit, ...rawFilters } = req.query;
-    const { clause, values, nextIndex } = buildWhereClause(rawFilters, [
+    const filters = { ...rawFilters };
+    const isAdmin = req.user?.role === "admin";
+
+    if (!isAdmin) {
+      // Users can only see their own tickets, never arbitrary emails from query params.
+      const email = String(req.user?.email || "").trim().toLowerCase();
+      const phone = String(req.user?.phone || "").trim();
+      if (!email && !phone) return res.json([]);
+
+      delete filters.email;
+      delete filters.phone;
+      if (email) filters.email = email;
+      if (!email && phone) filters.phone = phone;
+    }
+
+    const { clause, values, nextIndex } = buildWhereClause(filters, [
       "id",
       "event_id",
       "email",
+      "phone",
       "status",
       "registration_method",
     ]);
@@ -60,9 +75,21 @@ router.get("/", async (req, res, next) => {
   }
 });
 
-router.post("/", async (req, res, next) => {
+router.post("/", requireAuth, async (req, res, next) => {
   try {
     const payload = registrationSchema.parse(req.body);
+    const isAdmin = req.user?.role === "admin";
+
+    if (!isAdmin) {
+      const accountEmail = String(req.user?.email || "").trim().toLowerCase();
+      const accountPhone = String(req.user?.phone || "").trim();
+      if (!accountEmail || !accountPhone) {
+        return next(httpError(400, "A valid account with email and phone is required"));
+      }
+      payload.email = accountEmail;
+      payload.phone = accountPhone;
+    }
+
     const fields = Object.keys(payload).filter((k) => payload[k] !== undefined && payload[k] !== "");
     const columns = fields.join(", ");
     const placeholders = fields.map((_, i) => `$${i + 1}`).join(", ");
@@ -90,7 +117,6 @@ router.patch("/:id", requireAdmin, async (req, res, next) => {
       "phone",
       "email",
       "gender",
-      "age",
       "id_type",
       "id_number",
     ];

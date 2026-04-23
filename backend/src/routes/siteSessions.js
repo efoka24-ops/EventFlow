@@ -5,6 +5,7 @@ import { requireAdmin } from "../middlewares/auth.js";
 import { parseLimit, parseSort } from "../utils/queryHelpers.js";
 
 const router = Router();
+const sessionIdSchema = z.string().uuid();
 
 const heartbeatSchema = z.object({
   started_at: z.string().datetime().optional(),
@@ -54,6 +55,7 @@ router.get("/", requireAdmin, async (req, res, next) => {
 
 router.put("/:id/heartbeat", async (req, res, next) => {
   try {
+    sessionIdSchema.parse(req.params.id);
     const payload = heartbeatSchema.parse(req.body || {});
     const now = new Date().toISOString();
 

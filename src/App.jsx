@@ -4,7 +4,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
-import { AuthProvider, useAuth } from '@/lib/AuthContext';
+import { AuthProvider, useAuth } from '@/libs/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -14,6 +14,8 @@ import EventDetail from '@/components/pages/EventDetail';
 import Help from '@/components/pages/Help';
 import ParticipantTickets from '@/components/pages/ParticipantTickets';
 import SubmitEvent from '@/components/pages/SubmitEvent';
+import UserDashboard from '@/components/pages/UserDashboard';
+import UserEventsDashboard from '@/components/pages/UserEventsDashboard';
 import AdminLogin from '@/components/pages/admin/AdminLogin';
 import Dashboard from '@/components/pages/admin/Dashboard';
 import AdminEvents from '@/components/pages/admin/AdminEvents';
@@ -23,6 +25,7 @@ import AdminUserActivity from '@/components/pages/admin/AdminUserActivity';
 import AdminAccounts from '@/components/pages/admin/AdminAccounts';
 import AdminPayments from '@/components/pages/admin/AdminPayments';
 import SiteAnalyticsTracker from '@/components/analytics/SiteAnalyticsTracker';
+import { getCreatorUser } from '@/lib/creatorSession';
 
 const isAdminUser = (user) => {
   if (!user) return false;
@@ -67,7 +70,9 @@ const AuthenticatedApp = () => {
         <Route path="/events/:id" element={<EventDetail />} />
         <Route path="/help" element={<Help />} />
         <Route path="/submit-event" element={<SubmitEvent />} />
-        <Route path="/participant/tickets" element={<ParticipantTickets />} />
+        <Route path="/participant/tickets" element={getCreatorUser() ? <ParticipantTickets /> : <Navigate to="/submit-event?auth=login" replace />} />
+        <Route path="/dashboard" element={getCreatorUser() ? <UserDashboard /> : <Navigate to="/submit-event?auth=login" replace />} />
+        <Route path="/dashboard/events" element={getCreatorUser() ? <UserEventsDashboard /> : <Navigate to="/submit-event?auth=login" replace />} />
         <Route path="/admin/login" element={<AdminLogin />} />
       </Route>
       {canAccessAdmin && (

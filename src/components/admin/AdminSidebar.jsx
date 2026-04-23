@@ -1,10 +1,9 @@
-import React from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LayoutDashboard, CalendarDays, Users, ArrowLeft, CircleHelp, Activity, UserCog, CreditCard } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { base44 } from "@/api/base44Client";
+import { listRegistrations } from "@/api/registrationsApi";
 
 const navItems = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
@@ -21,7 +20,7 @@ export default function AdminSidebar() {
 
   const { data: registrations = [] } = useQuery({
     queryKey: ["admin-registrations"],
-    queryFn: () => base44.entities.Registration.list("-created_date"),
+    queryFn: () => listRegistrations({ sort: "-created_date" }),
     refetchInterval: 30_000,
     refetchOnMount: "always",
   });
