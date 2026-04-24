@@ -51,7 +51,7 @@ const applyMigration = async (migrationsDir, filename) => {
 };
 
 const run = async () => {
-  const migrationsDir = path.resolve(__dirname, "../../../database/migrations");
+  const migrationsDir = path.resolve(process.cwd(), "database/migrations");
 
   await ensureMigrationsTable();
   const files = await getMigrationFiles(migrationsDir);
