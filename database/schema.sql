@@ -59,6 +59,7 @@ CREATE INDEX IF NOT EXISTS idx_events_city ON events (city);
 CREATE INDEX IF NOT EXISTS idx_events_organizer_email ON events (organizer_email);
 CREATE INDEX IF NOT EXISTS idx_events_submitted_by_user ON events (submitted_by_user);
 
+DROP TRIGGER IF EXISTS trg_events_updated_date ON events;
 CREATE TRIGGER trg_events_updated_date
 BEFORE UPDATE ON events
 FOR EACH ROW
@@ -109,6 +110,7 @@ CREATE INDEX IF NOT EXISTS idx_registrations_email ON registrations (email);
 CREATE INDEX IF NOT EXISTS idx_registrations_created_date ON registrations (created_date DESC);
 CREATE INDEX IF NOT EXISTS idx_registrations_updated_date ON registrations (updated_date DESC);
 
+DROP TRIGGER IF EXISTS trg_registrations_updated_date ON registrations;
 CREATE TRIGGER trg_registrations_updated_date
 BEFORE UPDATE ON registrations
 FOR EACH ROW
@@ -135,6 +137,7 @@ CREATE TABLE IF NOT EXISTS help_articles (
 CREATE INDEX IF NOT EXISTS idx_help_articles_topic ON help_articles (topic_id);
 CREATE INDEX IF NOT EXISTS idx_help_articles_topic_order ON help_articles (topic_order, article_order);
 
+DROP TRIGGER IF EXISTS trg_help_articles_updated_date ON help_articles;
 CREATE TRIGGER trg_help_articles_updated_date
 BEFORE UPDATE ON help_articles
 FOR EACH ROW
@@ -193,6 +196,7 @@ CREATE INDEX IF NOT EXISTS idx_site_sessions_user_email ON site_sessions (user_e
 CREATE INDEX IF NOT EXISTS idx_site_sessions_country_city ON site_sessions (country, city);
 CREATE INDEX IF NOT EXISTS idx_site_sessions_is_active ON site_sessions (is_active);
 
+DROP TRIGGER IF EXISTS trg_site_sessions_updated_date ON site_sessions;
 CREATE TRIGGER trg_site_sessions_updated_date
 BEFORE UPDATE ON site_sessions
 FOR EACH ROW
@@ -219,6 +223,7 @@ CREATE INDEX IF NOT EXISTS idx_event_feedback_event_id ON event_feedback (event_
 CREATE INDEX IF NOT EXISTS idx_event_feedback_created_date ON event_feedback (created_date DESC);
 CREATE INDEX IF NOT EXISTS idx_event_feedback_rating ON event_feedback (rating);
 
+DROP TRIGGER IF EXISTS trg_event_feedback_updated_date ON event_feedback;
 CREATE TRIGGER trg_event_feedback_updated_date
 BEFORE UPDATE ON event_feedback
 FOR EACH ROW
@@ -253,6 +258,7 @@ CREATE INDEX IF NOT EXISTS idx_user_actions_created_date ON user_actions (create
 CREATE INDEX IF NOT EXISTS idx_user_actions_event_id ON user_actions (event_id);
 CREATE INDEX IF NOT EXISTS idx_user_actions_session_id ON user_actions (session_id);
 
+DROP TRIGGER IF EXISTS trg_user_actions_updated_date ON user_actions;
 CREATE TRIGGER trg_user_actions_updated_date
 BEFORE UPDATE ON user_actions
 FOR EACH ROW
@@ -302,6 +308,7 @@ CREATE INDEX IF NOT EXISTS idx_payments_registration_id ON payments (registratio
 CREATE INDEX IF NOT EXISTS idx_payments_status_local ON payments (status_local);
 CREATE INDEX IF NOT EXISTS idx_payments_created_date ON payments (created_date DESC);
 
+DROP TRIGGER IF EXISTS trg_payments_updated_date ON payments;
 CREATE TRIGGER trg_payments_updated_date
 BEFORE UPDATE ON payments
 FOR EACH ROW
@@ -348,6 +355,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_creator_accounts_phone
 
 CREATE INDEX IF NOT EXISTS idx_creator_accounts_created_date ON creator_accounts (created_date DESC);
 
+DROP TRIGGER IF EXISTS trg_creator_accounts_updated_date ON creator_accounts;
 CREATE TRIGGER trg_creator_accounts_updated_date
 BEFORE UPDATE ON creator_accounts
 FOR EACH ROW
