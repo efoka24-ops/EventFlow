@@ -80,13 +80,14 @@ router.post("/collect", async (req, res, next) => {
     const successUrl = payload.redirect_url || `${config.corsOrigin}/payment/success`;
     const cancelUrl = payload.failure_redirect_url || `${config.corsOrigin}/payment/cancel`;
 
-    const inserted = await dbTryQuery(
+    const inserted = await query(
       `INSERT INTO payments (
-        registration_id, event_id, provider, endpoint, amount, currency,
-        description, external_reference, status_local, payer_name, phone_number
-      ) VALUES ($1,$2,'easytransact','checkout-link',$3,$4,$5,$6,'initiated',$7,$8)
+        id, registration_id, event_id, provider, endpoint, amount, currency,
+        description, external_reference, status_local, payer_name, phone_number, created_date
+      ) VALUES ($1,$2,$3,'easytransact','checkout-link',$4,$5,$6,$7,'initiated',$8,$9,$10)
       RETURNING *`,
       [
+        paymentId,
         payload.registration_id || null,
         payload.event_id,
         amount,
@@ -95,25 +96,14 @@ router.post("/collect", async (req, res, next) => {
         externalReference,
         payload.payer_name || null,
         payload.phone_number || null,
+        now,
       ]
-    );
+    ).catch(err => {
+      console.error("[payments] INSERT failed:", err.message);
+      throw httpError(500, "Erreur lors de la création du paiement");
+    });
 
-    const payment = inserted?.rows?.[0] ?? {
-      id: paymentId,
-      registration_id: payload.registration_id || null,
-      event_id: payload.event_id,
-      provider: "easytransact",
-      endpoint: "checkout-link",
-      amount,
-      currency: payload.currency,
-      description: payload.description,
-      external_reference: externalReference,
-      status_local: "initiated",
-      payer_name: payload.payer_name || null,
-      phone_number: payload.phone_number || null,
-      created_date: now,
-    };
-    if (!inserted) { memPayments.set(payment.id, payment); saveMemPayments(); }
+    const payment = inserted.rows[0];
 
     const etResponse = await etCreateCheckoutLink({
       amount,
@@ -145,7 +135,6 @@ router.post("/collect", async (req, res, next) => {
       campay_reference: etResponse.payment_link_id || externalReference,
       status_provider: etResponse.status || null,
     };
-    if (!updated) { memPayments.set(finalPayment.id, finalPayment); saveMemPayments(); }
 
     await persistPaymentEvent(payment.id, "checkout_link_created", etResponse);
 
@@ -168,12 +157,25 @@ router.get("/:id/status", async (req, res, next) => {
     const memById = memPayments.get(req.params.id);
     const memByRef = !memById ? [...memPayments.values()].find(p => p.campay_reference === req.params.id) : null;
     const payment = found?.rows?.[0] ?? memById ?? memByRef;
-    if (!payment) return next(httpError(404, "Payment not found"));
+    if (!payment) {
+      console.warn(`[payments] Payment not found: ${req.params.id}`);
+      return next(httpError(404, "Payment not found"));
+    }
 
     const vendorRef = payment.external_reference || payment.campay_reference;
-    if (!vendorRef) return res.json({ payment });
+    if (!vendorRef) {
+      console.log(`[payments] No vendor ref for ${req.params.id}, returning as-is`);
+      return res.json({ payment });
+    }
 
-    const providerStatus = await etGetTransactionStatus(vendorRef);
+    let providerStatus;
+    try {
+      providerStatus = await etGetTransactionStatus(vendorRef);
+    } catch (err) {
+      console.error(`[payments] Failed to get status from Easy Transact: ${vendorRef}`, err.message);
+      return res.json({ payment });
+    }
+
     const localStatus = mapEtStatusToLocal(providerStatus.status);
 
     const updated = await dbTryQuery(
