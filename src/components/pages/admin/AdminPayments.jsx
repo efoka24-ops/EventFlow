@@ -77,7 +77,7 @@ export default function AdminPayments() {
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <CreditCard className="w-6 h-6 text-primary" /> Monitoring Paiements
           </h1>
-          <p className="text-muted-foreground text-sm mt-1">Suivi des transactions CamPay en temps réel</p>
+          <p className="text-muted-foreground text-sm mt-1">Suivi des transactions Easy Transact en temps réel</p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching}>
           <RefreshCw className={`w-4 h-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
@@ -160,7 +160,7 @@ export default function AdminPayments() {
                   <TableHead>Montant</TableHead>
                   <TableHead>Opérateur</TableHead>
                   <TableHead>Statut</TableHead>
-                  <TableHead>Référence CamPay</TableHead>
+                  <TableHead>Référence Easy Transact</TableHead>
                   <TableHead className="text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
@@ -249,7 +249,7 @@ export default function AdminPayments() {
                 <p>{selected.description || "—"}</p>
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">Référence CamPay</p>
+                <p className="text-xs text-muted-foreground mb-1">Référence Easy Transact</p>
                 <p className="font-mono text-xs break-all">{selected.campay_reference || "—"}</p>
               </div>
               <div>
