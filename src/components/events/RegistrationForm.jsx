@@ -109,19 +109,32 @@ export default function RegistrationForm({ event, onSuccess }) {
 
   const stopPolling = () => {
     if (pollRef.current) {
-      clearInterval(pollRef.current);
+      clearTimeout(pollRef.current);
       pollRef.current = null;
     }
   };
 
   useEffect(() => () => stopPolling(), []);
 
+  const pollIntervalRef = useRef(10000);
+
   const startPolling = (id) => {
     stopPolling();
-    pollRef.current = setInterval(async () => {
+    pollIntervalRef.current = 10000;
+
+    const doPoll = async () => {
       try {
         const res = await fetch(`/api/payments/${id}/status`);
-        if (!res.ok) return;
+        if (res.status === 429) {
+          // Rate limited — back off exponentially (max 60s)
+          pollIntervalRef.current = Math.min(pollIntervalRef.current * 2, 60000);
+          pollRef.current = setTimeout(doPoll, pollIntervalRef.current);
+          return;
+        }
+        if (!res.ok) {
+          pollRef.current = setTimeout(doPoll, pollIntervalRef.current);
+          return;
+        }
         const data = await res.json();
         const status = data.payment?.status_local ?? data.status;
         setPaymentStatus(status);
@@ -140,11 +153,15 @@ export default function RegistrationForm({ event, onSuccess }) {
         } else if (status === "failed") {
           stopPolling();
           toast.error("Le paiement a échoué. Veuillez réessayer.");
+        } else {
+          pollRef.current = setTimeout(doPoll, pollIntervalRef.current);
         }
       } catch {
-        // silent — keep polling
+        pollRef.current = setTimeout(doPoll, pollIntervalRef.current);
       }
-    }, 5000);
+    };
+
+    pollRef.current = setTimeout(doPoll, pollIntervalRef.current);
   };
 
   const handlePayment = async () => {
@@ -233,6 +250,7 @@ export default function RegistrationForm({ event, onSuccess }) {
           first_name: nameParts[0] || "",
           last_name: nameParts.slice(1).join(" ") || "",
           email: nextEmail,
+          phone: user.phone || prev.phone,
         }));
       })
       .catch(() => {
@@ -617,26 +635,25 @@ export default function RegistrationForm({ event, onSuccess }) {
                 <Input required value={formData.last_name} onChange={(e) => handleChange("last_name", e.target.value)} />
               </div>
             </div>
-            <div className="space-y-1.5">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                placeholder="optionnel"
-              />
-              {currentUser && (
-                <p className="text-xs text-muted-foreground">
-                  Email pre-rempli depuis votre compte connecte, modifiable si besoin.
-                </p>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+            {!currentUser && (
               <div className="space-y-1.5">
-                <Label>Téléphone *</Label>
-                <Input required type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} placeholder="+225 XX XX XX XX" />
+                <Label>Email</Label>
+                <Input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => handleChange("email", e.target.value)}
+                  placeholder="optionnel"
+                />
               </div>
-              <div className="space-y-1.5">
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              {(!currentUser || !currentUser.phone) && (
+                <div className="space-y-1.5">
+                  <Label>Téléphone *</Label>
+                  <Input required type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} placeholder="+237 6XX XX XX XX" />
+                </div>
+              )}
+              <div className={`space-y-1.5 ${(!currentUser || !currentUser.phone) ? "" : "col-span-2"}`}>
                 <Label>Genre</Label>
                 <Select value={formData.gender} onValueChange={(v) => handleChange("gender", v)}>
                   <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
