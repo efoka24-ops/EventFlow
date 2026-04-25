@@ -189,7 +189,7 @@ export default function AdminPayments() {
                       <div className="flex flex-col gap-0.5">
                         <StatusBadge status={p.status_local} />
                         {p.status_local === "initiated" && (
-                          <p className="text-xs text-blue-500 leading-tight">En attente de validation MoMo</p>
+                          <p className="text-xs text-blue-500 leading-tight">En attente de confirmation</p>
                         )}
                       </div>
                     </TableCell>

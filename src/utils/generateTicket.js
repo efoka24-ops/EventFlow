@@ -156,7 +156,7 @@ export async function generateTicketPDF({ event, registration, payment = null })
     doc.setFontSize(9);
     doc.setTextColor(30, 30, 30);
     const payLines = [];
-    if (payment.campay_reference) payLines.push(`N° paiement : ${payment.campay_reference}`);
+    if (payment.campay_reference) payLines.push(`Réf. Easy Transact : ${payment.campay_reference}`);
     if (paidDateStr) payLines.push(`Date : ${paidDateStr}  |  Heure : ${paidTimeStr}`);
     if (payment.operator) payLines.push(`Opérateur : ${payment.operator}`);
     payLines.forEach((line, i) => {
