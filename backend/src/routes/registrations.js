@@ -83,11 +83,11 @@ router.post("/", requireAuth, async (req, res, next) => {
     if (!isAdmin) {
       const accountEmail = String(req.user?.email || "").trim().toLowerCase();
       const accountPhone = String(req.user?.phone || "").trim();
-      if (!accountEmail || !accountPhone) {
-        return next(httpError(400, "A valid account with email and phone is required"));
+      if (!accountEmail) {
+        return next(httpError(400, "A valid account with email is required"));
       }
       payload.email = accountEmail;
-      payload.phone = accountPhone;
+      if (accountPhone) payload.phone = accountPhone;
     }
 
     const fields = Object.keys(payload).filter((k) => payload[k] !== undefined && payload[k] !== "");
