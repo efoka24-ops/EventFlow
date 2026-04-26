@@ -51,9 +51,19 @@ const createEventSchema = z.object({
   organizer_phone: z.string().optional(),
 });
 
+// List columns — description truncated to 220 chars for card previews; full text via /:id
+const LIST_COLUMNS = `
+  id, title, category, status, approval_status,
+  date_start, date_end, city, location_name,
+  image_url, price, max_participants, tags,
+  organizer_name, organizer_email, organizer_phone,
+  submitted_by_user, is_featured, created_date, updated_date,
+  LEFT(description, 220) AS description
+`;
+
 router.get("/", async (req, res, next) => {
   try {
-    const { sort, limit, ...rawFilters } = req.query;
+    const { sort, limit, fields, ...rawFilters } = req.query;
     const { clause, values, nextIndex } = buildWhereClause(rawFilters, [
       "id",
       "status",
@@ -66,8 +76,11 @@ router.get("/", async (req, res, next) => {
     const { field, direction } = parseSort(sort, ["created_date", "date_start", "updated_date"], "-created_date");
     const parsedLimit = parseLimit(limit, null, 200);
 
+    // Pass ?fields=full to get all columns (e.g. admin views that need description)
+    const columns = fields === "full" ? "*" : LIST_COLUMNS;
+
     const sql = `
-      SELECT *
+      SELECT ${columns}
       FROM events
       ${clause}
       ORDER BY ${field} ${direction}
@@ -92,7 +105,7 @@ router.get("/mine/list", requireAuth, async (req, res, next) => {
     }
 
     const result = await query(
-      `SELECT *
+      `SELECT ${LIST_COLUMNS}
        FROM events
        WHERE submitted_by_user = true
          AND ((LOWER(organizer_email) = LOWER($1) AND $1 <> '') OR (organizer_phone = $2 AND $2 <> ''))
