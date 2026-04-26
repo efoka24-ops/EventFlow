@@ -3,7 +3,10 @@
     "allow": [
       "Bash(npm install *)",
       "Bash(grep -E \"\\\\.\\(jsx|js\\)$\")",
-      "Bash(sed 's/ .*//')"
+      "Bash(sed 's/ .*//')",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
