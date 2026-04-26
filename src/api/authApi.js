@@ -37,7 +37,9 @@ export const getAdminUser = () => {
     tokenStore.clearAdminToken();
     return null;
   }
-  return { ...payload, role: "admin", isAdmin: true };
+  const ADMIN_ROLES = ["super_admin", "admin", "support", "finance", "marketing", "moderator"];
+  const role = ADMIN_ROLES.includes(payload.role) ? payload.role : "admin";
+  return { ...payload, role, isAdmin: true };
 };
 
 export const getCreatorUser = () => {

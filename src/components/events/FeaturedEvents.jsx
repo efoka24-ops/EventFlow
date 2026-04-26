@@ -1,6 +1,7 @@
 import { listEvents } from "@/api/eventsApi";
 import { useQuery } from "@tanstack/react-query";
-import EventCard from "./EventCard";
+import { Link } from "react-router-dom";
+import EventCardModern from "@/components/events/EventCardModern";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function FeaturedEvents() {
@@ -35,7 +36,9 @@ export default function FeaturedEvents() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {events.map((event, i) => (
-            <EventCard key={event.id} event={event} index={i} />
+            <Link key={event.id} to={`/events/${event.id}`}>
+              <EventCardModern event={event} index={i} />
+            </Link>
           ))}
         </div>
       )}

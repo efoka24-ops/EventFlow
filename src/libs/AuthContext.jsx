@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const { user: adminUser } = await apiAdminLogin({ email, password });
       const decoded = getAdminUser();
-      const merged = { ...adminUser, ...(decoded || {}), role: "admin", isAdmin: true };
+      const merged = { ...adminUser, ...(decoded || {}), role: decoded?.role || adminUser?.role || "admin", isAdmin: true };
       setUser(merged);
       setIsAuthenticated(true);
       return true;

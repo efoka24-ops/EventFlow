@@ -5,17 +5,33 @@ import morgan from "morgan";
 import { ZodError } from "zod";
 import { config } from "./config.js";
 import { apiRouter } from "./routes/index.js";
+import { createRateLimiter } from "./middlewares/rateLimit.js";
 
 export const app = express();
 
-app.use(helmet());
+app.disable("x-powered-by");
+
+const globalLimiter = createRateLimiter({ windowMs: 60_000, max: 300, name: "global" });
+const authLimiter = createRateLimiter({ windowMs: 15 * 60_000, max: 40, name: "auth" });
+const paymentLimiter = createRateLimiter({ windowMs: 10 * 60_000, max: 80, name: "payments" });
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    referrerPolicy: { policy: "no-referrer" },
+  })
+);
 app.use(
   cors({
     origin: config.corsOrigin,
     credentials: true,
   })
 );
-app.use(express.json({ limit: "10mb" }));
+app.use(globalLimiter);
+app.use("/api/auth", authLimiter);
+app.use("/api/payments", paymentLimiter);
+app.use(express.json({ limit: "2mb" }));
+app.use(express.urlencoded({ extended: false, limit: "2mb" }));
 app.use(morgan("dev"));
 
 app.get("/health", (_req, res) => {

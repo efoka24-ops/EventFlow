@@ -1,84 +1,142 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { listRegistrations } from "@/api/registrationsApi";
 import { listEvents } from "@/api/eventsApi";
+import { getMyTickets } from "@/api/registrationsApi";
+import { getFavoriteEvents, getParticipantEmail, removeFavoriteEvent, setParticipantEmail } from "@/lib/participantSession";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { REGISTRATION_STATUS } from "@/lib/constants";
-import { getCreatorEmail, getCreatorUser } from "@/lib/creatorSession";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Loader2, RefreshCcw, Ticket } from "lucide-react";
+import { Loader2, RefreshCcw, Ticket, Mail, MapPin, CalendarDays, Download, Search, CheckCircle2, Heart, Clock3, ArrowRight, BellRing, Sparkles, User } from "lucide-react";
 import { toast } from "sonner";
 import { generateTicketPDF } from "@/utils/generateTicket";
-import { trackUserAction } from "@/lib/trackUserAction";
-import { Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function ParticipantTickets() {
-  const creatorUser = getCreatorUser();
-  const participantEmail = getCreatorEmail();
+  const [searchParams] = useSearchParams();
+  const initialEmail = searchParams.get("email") || getParticipantEmail() || "";
+  const [emailInput, setEmailInput] = useState(initialEmail);
+  const [searchedEmail, setSearchedEmail] = useState(initialEmail);
+  const [tickets, setTickets] = useState([]);
+  const [loading, setLoading] = useState(Boolean(initialEmail));
+  const [searched, setSearched] = useState(Boolean(initialEmail));
   const [ticketLoadingId, setTicketLoadingId] = useState(null);
+  const [favoriteEvents, setFavoriteEvents] = useState(() => getFavoriteEvents());
 
-  const { data: registrations = [], isLoading, refetch } = useQuery({
-    queryKey: ["participant-registrations", participantEmail],
-    enabled: Boolean(participantEmail),
-    queryFn: () => listRegistrations({ email: participantEmail, sort: "-updated_date" }),
-    refetchOnMount: "always",
-    refetchInterval: 20000,
+  const { data: recommendedEvents = [] } = useQuery({
+    queryKey: ["participant-recommendations"],
+    queryFn: () => listEvents({ status: "publie", sort: "-created_date", limit: 12 }),
   });
 
-  const { data: events = [] } = useQuery({
-    queryKey: ["events"],
-    queryFn: () => listEvents(),
-    enabled: Boolean(participantEmail),
-    refetchOnMount: "always",
-  });
-
-  const eventsById = useMemo(
-    () => Object.fromEntries(events.map((event) => [event.id, event])),
-    [events]
-  );
-
-  if (!creatorUser) {
-    return (
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <Card>
-          <CardHeader>
-            <CardTitle>Connexion requise</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Pour consulter vos billets, connectez-vous ou creez votre compte.
-              L'inscription du compte exige un email et un numero de telephone.
-            </p>
-            <Link to="/submit-event" className="inline-block">
-              <Button>Se connecter ou creer un compte</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  const handleDownloadTicket = async (registration) => {
-    const event = eventsById[registration.event_id];
-    if (!event) {
-      toast.error("Événement introuvable pour ce billet.");
+  const fetchTickets = async (email) => {
+    const normalized = (email || "").trim().toLowerCase();
+    if (!normalized || !normalized.includes("@")) {
+      toast.error("Entrez un email valide.");
       return;
     }
-
-    setTicketLoadingId(registration.id);
+    setLoading(true);
+    setSearchedEmail(normalized);
+    setSearched(true);
     try {
-      await generateTicketPDF({ event, registration });
-      trackUserAction({
-        action: "ticket_download",
-        user_email: participantEmail,
-        event_id: registration.event_id,
-        event_title: event.title,
-        event_category: event.category,
-        context: "participant_tickets",
-      });
+      const data = await getMyTickets(normalized);
+      setParticipantEmail(normalized);
+      setTickets(data || []);
+    } catch {
+      toast.error("Impossible de récupérer vos billets. Réessayez.");
+      setTickets([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (initialEmail) {
+      fetchTickets(initialEmail);
+    }
+  }, [initialEmail]);
+
+  useEffect(() => {
+    const refreshFavorites = () => setFavoriteEvents(getFavoriteEvents());
+    window.addEventListener("participant-session-changed", refreshFavorites);
+    window.addEventListener("storage", refreshFavorites);
+    window.addEventListener("focus", refreshFavorites);
+    return () => {
+      window.removeEventListener("participant-session-changed", refreshFavorites);
+      window.removeEventListener("storage", refreshFavorites);
+      window.removeEventListener("focus", refreshFavorites);
+    };
+  }, []);
+
+  const upcomingTickets = useMemo(() => {
+    const now = Date.now();
+    return [...tickets]
+      .filter((ticket) => ticket.date_start && new Date(ticket.date_start).getTime() >= now)
+      .sort((a, b) => new Date(a.date_start) - new Date(b.date_start));
+  }, [tickets]);
+
+  const pastTickets = useMemo(() => {
+    const now = Date.now();
+    return [...tickets]
+      .filter((ticket) => !ticket.date_start || new Date(ticket.date_start).getTime() < now)
+      .sort((a, b) => new Date(b.date_start || 0) - new Date(a.date_start || 0));
+  }, [tickets]);
+
+  const validatedCount = useMemo(
+    () => tickets.filter((ticket) => ticket.status === "validee").length,
+    [tickets]
+  );
+
+  const nextUpcomingTicket = upcomingTickets[0] || null;
+
+  const suggestedEvents = useMemo(() => {
+    const ticketedEventIds = new Set(tickets.map((ticket) => ticket.event_id));
+    const favoriteIds = new Set(favoriteEvents.map((event) => event.id));
+    const preferredCategories = new Set(
+      [...favoriteEvents, ...tickets]
+        .map((item) => item.category || item.event_category)
+        .filter(Boolean)
+    );
+    const preferredCities = new Set(
+      [...favoriteEvents, ...tickets]
+        .map((item) => item.city)
+        .filter(Boolean)
+    );
+
+    return recommendedEvents
+      .filter((event) => !ticketedEventIds.has(event.id))
+      .sort((left, right) => {
+        const leftScore =
+          (favoriteIds.has(left.id) ? 1 : 0) +
+          (preferredCategories.has(left.category) ? 2 : 0) +
+          (preferredCities.has(left.city) ? 1 : 0);
+        const rightScore =
+          (favoriteIds.has(right.id) ? 1 : 0) +
+          (preferredCategories.has(right.category) ? 2 : 0) +
+          (preferredCities.has(right.city) ? 1 : 0);
+
+        return rightScore - leftScore;
+      })
+      .slice(0, 4);
+  }, [favoriteEvents, recommendedEvents, tickets]);
+
+  const handleDownload = async (ticket) => {
+    setTicketLoadingId(ticket.id);
+    try {
+      const event = {
+        id: ticket.event_id,
+        title: ticket.event_title,
+        date_start: ticket.date_start,
+        city: ticket.city,
+        location_name: ticket.location_name,
+        image_url: ticket.event_image,
+        price: ticket.event_price,
+        organizer_name: ticket.organizer_name,
+      };
+      await generateTicketPDF({ event, registration: ticket });
     } catch {
       toast.error("Impossible de générer le billet.");
     } finally {
@@ -86,132 +144,382 @@ export default function ParticipantTickets() {
     }
   };
 
+  const statusColors = {
+    validee: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+    en_attente: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
+    en_attente_paiement: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+    refusee: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+  };
+
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-6">
-      <div className="space-y-2">
+    <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
+      {/* Header */}
+      <div className="text-center space-y-2">
+        <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+          <Ticket className="w-7 h-7 text-primary" />
+        </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold">Mes billets</h1>
-        <p className="text-muted-foreground">
-          Connectez-vous avec votre email pour suivre le statut de vos inscriptions et télécharger vos billets à jour.
+        <p className="text-muted-foreground text-sm max-w-md mx-auto">
+          Entrez votre email pour retrouver tous vos billets EventFlow. Aucun compte nécessaire.
         </p>
       </div>
 
-      {participantEmail ? (
-        <>
-          <Card>
-            <CardContent className="pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      {(searchedEmail || favoriteEvents.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="border-border/50 md:col-span-2">
+            <CardContent className="pt-5 pb-4 flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Connecté avec</p>
-                <p className="font-semibold break-all">{participantEmail}</p>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Mini espace participant</p>
+                <p className="text-base font-bold mt-1">{searchedEmail || getParticipantEmail() || "Visiteur"}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Vos billets sont mémorisés automatiquement après inscription. Pas de compte explicite requis.
+                </p>
               </div>
-              <div className="flex gap-2">
-                <Button variant="outline" className="gap-2" onClick={() => refetch()}>
-                  <RefreshCcw className="w-4 h-4" />
-                  Actualiser
-                </Button>
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <Badge variant="secondary">Compte implicite</Badge>
+                <Link to="/participant/profile">
+                  <Button size="sm" variant="outline" className="gap-1.5 rounded-full">
+                    <User className="w-3.5 h-3.5" /> Voir mon profil
+                  </Button>
+                </Link>
               </div>
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {isLoading ? (
-              <Card>
-                <CardContent className="py-10 text-center text-muted-foreground">Chargement des billets...</CardContent>
-              </Card>
-            ) : registrations.length === 0 ? (
-              <Card>
-                <CardContent className="py-10 text-center space-y-2">
-                  <p className="font-semibold">Aucun billet trouvé</p>
+          <div className="grid grid-cols-3 md:grid-cols-1 gap-4">
+            <Card className="border-border/50">
+              <CardContent className="pt-4 pb-3 text-center">
+                <p className="text-xl font-extrabold">{tickets.length}</p>
+                <p className="text-xs text-muted-foreground">Billets</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/50">
+              <CardContent className="pt-4 pb-3 text-center">
+                <p className="text-xl font-extrabold text-emerald-600">{validatedCount}</p>
+                <p className="text-xs text-muted-foreground">Validés</p>
+              </CardContent>
+            </Card>
+            <Card className="border-border/50">
+              <CardContent className="pt-4 pb-3 text-center">
+                <p className="text-xl font-extrabold text-primary">{favoriteEvents.length}</p>
+                <p className="text-xs text-muted-foreground">Favoris</p>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {(searchedEmail || tickets.length > 0 || favoriteEvents.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BellRing className="w-4 h-4 text-primary" /> Rappel participant
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {nextUpcomingTicket ? (
+                <>
+                  <p className="font-semibold">Votre prochain événement est déjà planifié.</p>
                   <p className="text-sm text-muted-foreground">
-                    Vérifiez l'email saisi ou inscrivez-vous à un événement.
+                    {nextUpcomingTicket.event_title} le {nextUpcomingTicket.date_start ? format(new Date(nextUpcomingTicket.date_start), "dd MMM yyyy 'à' HH:mm", { locale: fr }) : "bientôt"}
+                    {nextUpcomingTicket.city ? ` à ${nextUpcomingTicket.city}` : ""}.
                   </p>
+                  <p className="text-sm text-muted-foreground">
+                    Pensez à télécharger votre billet PDF avant le jour J pour un accès plus rapide à l'entrée.
+                  </p>
+                </>
+              ) : favoriteEvents.length > 0 ? (
+                <>
+                  <p className="font-semibold">Vous avez {favoriteEvents.length} événement(s) en veille.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Finalisez votre prochaine sortie en ouvrant vos favoris ou en surveillant les nouvelles dates publiées.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-semibold">Aucun rappel actif pour le moment.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Inscrivez-vous à un événement ou ajoutez des favoris pour personnaliser cet espace automatiquement.
+                  </p>
+                </>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" /> Recommandés pour vous
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {suggestedEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Les recommandations apparaîtront dès que nous aurons plus d'indices sur vos goûts.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {suggestedEvents.map((event) => (
+                    <div key={event.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/50 p-3">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm line-clamp-1">{event.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {[event.city, event.date_start ? format(new Date(event.date_start), "dd MMM yyyy", { locale: fr }) : null].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                      <Link to={`/events/${event.id}`}>
+                        <Button size="sm" variant="outline" className="gap-1 h-8 text-xs">
+                          Voir <ArrowRight className="w-3 h-3" />
+                        </Button>
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Email lookup */}
+      <Card className="border-border/50">
+        <CardContent className="pt-5 pb-4">
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && fetchTickets(emailInput)}
+                placeholder="votre@email.com"
+                className="pl-9"
+              />
+            </div>
+            <Button
+              onClick={() => fetchTickets(emailInput)}
+              disabled={loading}
+              className="gap-2 rounded-full shrink-0"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Rechercher
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Heart className="w-4 h-4 text-primary" /> Événements favoris
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {favoriteEvents.length === 0 ? (
+            <div className="text-sm text-muted-foreground">
+              Aucun favori pour le moment. Ajoutez des événements depuis leur fiche détail.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {favoriteEvents.slice(0, 6).map((event) => (
+                <div key={event.id} className="rounded-xl border border-border/50 p-3 flex items-start gap-3">
+                  {event.image_url ? (
+                    <img src={event.image_url} alt={event.title} className="w-16 h-16 rounded-lg object-cover shrink-0" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                      <Heart className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm line-clamp-2">{event.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {[event.city, event.date_start ? format(new Date(event.date_start), "dd MMM yyyy", { locale: fr }) : null].filter(Boolean).join(" · ")}
+                    </p>
+                    <div className="flex items-center gap-2 mt-3">
+                      <Link to={`/events/${event.id}`}>
+                        <Button size="sm" variant="outline" className="h-8 text-xs gap-1">
+                          Voir <ArrowRight className="w-3 h-3" />
+                        </Button>
+                      </Link>
+                      <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => removeFavoriteEvent(event.id)}>
+                        Retirer
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Results */}
+      <AnimatePresence mode="wait">
+        {loading && (
+          <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="space-y-3">
+            {[1, 2].map((i) => <div key={i} className="h-32 rounded-2xl bg-muted animate-pulse" />)}
+          </motion.div>
+        )}
+
+        {!loading && searched && tickets.length === 0 && (
+          <motion.div key="empty" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+            <Card className="border-border/50">
+              <CardContent className="py-12 text-center">
+                <Ticket className="w-12 h-12 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="font-semibold mb-1">Aucun billet trouvé</p>
+                <p className="text-sm text-muted-foreground">
+                  Aucune inscription associée à <strong>{searchedEmail}</strong>.<br />
+                  Vérifiez l'email utilisé lors de l'inscription.
+                </p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {!loading && tickets.length > 0 && (
+          <motion.div key="tickets" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                <strong>{tickets.length}</strong> billet(s) pour <strong>{searchedEmail}</strong>
+              </p>
+              <Button variant="ghost" size="sm" className="gap-1.5 text-xs" onClick={() => fetchTickets(searchedEmail)}>
+                <RefreshCcw className="w-3.5 h-3.5" /> Actualiser
+              </Button>
+            </div>
+
+            {upcomingTickets.length > 0 && (
+              <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4 text-primary" /> À venir
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {upcomingTickets.map((ticket) => {
+                    const sm = REGISTRATION_STATUS[ticket.status] || { label: ticket.status };
+                    const colorClass = statusColors[ticket.status] || "bg-muted text-muted-foreground";
+                    return (
+                      <motion.div key={ticket.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                        <Card className="border-border/50 hover:shadow-md transition-shadow overflow-hidden">
+                          <CardContent className="pt-4 pb-4 space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <p className="font-bold text-base leading-snug">{ticket.event_title || "Événement"}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Réf. {ticket.id?.slice(-8)?.toUpperCase()}</p>
+                              </div>
+                              <Badge className={`${colorClass} text-xs shrink-0`}>{sm.label}</Badge>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                              {ticket.date_start && (
+                                <div className="flex items-center gap-1.5">
+                                  <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                                  {format(new Date(ticket.date_start), "dd MMM yyyy", { locale: fr })}
+                                </div>
+                              )}
+                              {ticket.city && (
+                                <div className="flex items-center gap-1.5">
+                                  <MapPin className="w-3.5 h-3.5 shrink-0" /> {ticket.city}
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              variant="outline"
+                              className="w-full gap-2 rounded-full"
+                              onClick={() => handleDownload(ticket)}
+                              disabled={ticketLoadingId === ticket.id}
+                            >
+                              {ticketLoadingId === ticket.id
+                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                : <Download className="w-4 h-4" />}
+                              {ticketLoadingId === ticket.id ? "Génération..." : "Télécharger le billet PDF"}
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    );
+                  })}
                 </CardContent>
               </Card>
-            ) : (
-              registrations.map((registration) => {
-                const event = eventsById[registration.event_id];
-                const statusMeta = REGISTRATION_STATUS[registration.status] || {
-                  label: registration.status,
-                  color: "bg-muted",
-                };
+            )}
 
-                return (
-                  <Card key={registration.id}>
-                    <CardContent className="pt-6 space-y-4">
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Clock3 className="w-4 h-4 text-primary" /> Historique de participation
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {(pastTickets.length > 0 ? pastTickets : upcomingTickets).map((ticket) => {
+              const sm = REGISTRATION_STATUS[ticket.status] || { label: ticket.status };
+              const colorClass = statusColors[ticket.status] || "bg-muted text-muted-foreground";
+              return (
+                <motion.div key={ticket.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                  <Card className="border-border/50 hover:shadow-md transition-shadow overflow-hidden">
+                    {ticket.event_image && (
+                      <div className="h-28 overflow-hidden bg-muted">
+                        <img src={ticket.event_image} alt={ticket.event_title} className="w-full h-full object-cover" />
+                      </div>
+                    )}
+                    <CardContent className="pt-4 pb-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <p className="font-bold text-base truncate">{event?.title || "Événement"}</p>
-                          <p className="text-xs text-muted-foreground">
-                            Réf. billet: {registration.id?.slice(-8)?.toUpperCase()}
+                          <p className="font-bold text-base leading-snug">{ticket.event_title || "Événement"}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            Réf. {ticket.id?.slice(-8)?.toUpperCase()}
                           </p>
                         </div>
-                        <Badge className={statusMeta.color}>{statusMeta.label}</Badge>
+                        <Badge className={`${colorClass} text-xs shrink-0`}>{sm.label}</Badge>
                       </div>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-                        <div>
-                          <p className="text-muted-foreground text-xs">Participant</p>
-                          <p className="font-medium">
-                            {registration.first_name} {registration.last_name}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs">Date d'inscription</p>
-                          <p className="font-medium">
-                            {registration.created_date
-                              ? format(new Date(registration.created_date), "dd/MM/yyyy HH:mm", { locale: fr })
-                              : "-"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs">Dernière mise à jour</p>
-                          <p className="font-medium">
-                            {registration.updated_date
-                              ? format(new Date(registration.updated_date), "dd/MM/yyyy HH:mm", { locale: fr })
-                              : "-"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs">Notification email</p>
-                          <p className="font-medium">
-                            {registration.notification_sent_at
-                              ? `Envoyée le ${format(new Date(registration.notification_sent_at), "dd/MM/yyyy HH:mm", { locale: fr })}`
-                              : "En attente"}
-                          </p>
+                      <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                        {ticket.date_start && (
+                          <div className="flex items-center gap-1.5">
+                            <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                            {format(new Date(ticket.date_start), "dd MMM yyyy", { locale: fr })}
+                          </div>
+                        )}
+                        {ticket.city && (
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 shrink-0" /> {ticket.city}
+                          </div>
+                        )}
+                        <div className="flex items-center gap-1.5 col-span-2">
+                          <span className="font-medium text-foreground">
+                            {ticket.first_name} {ticket.last_name}
+                          </span>
                         </div>
                       </div>
+
+                      {ticket.status === "validee" && (
+                        <div className="flex items-center gap-2 p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-400">
+                          <CheckCircle2 className="w-4 h-4 shrink-0" />
+                          Billet validé — présentez le QR code à l'entrée
+                        </div>
+                      )}
 
                       <Button
                         variant="outline"
-                        className="w-full gap-2"
-                        onClick={() => handleDownloadTicket(registration)}
-                        disabled={ticketLoadingId === registration.id || !event}
+                        className="w-full gap-2 rounded-full"
+                        onClick={() => handleDownload(ticket)}
+                        disabled={ticketLoadingId === ticket.id}
                       >
-                        {ticketLoadingId === registration.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Ticket className="w-4 h-4" />
-                        )}
-                        {ticketLoadingId === registration.id
-                          ? "Préparation du billet..."
-                          : "Télécharger le billet (statut à jour)"}
+                        {ticketLoadingId === ticket.id
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <Download className="w-4 h-4" />}
+                        {ticketLoadingId === ticket.id ? "Génération..." : "Télécharger le billet PDF"}
                       </Button>
                     </CardContent>
                   </Card>
-                );
-              })
-            )}
-          </div>
-        </>
-      ) : (
-        <Card>
-          <CardContent className="py-10 text-center space-y-2">
-            <p className="font-semibold">Email de compte manquant</p>
-            <p className="text-sm text-muted-foreground">
-              Votre compte est connecte mais ne contient pas d'email. Connectez-vous avec un compte ayant un email.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+                </motion.div>
+              );
+                })}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

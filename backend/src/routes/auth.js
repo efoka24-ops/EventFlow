@@ -5,6 +5,7 @@ import { config } from "../config.js";
 import { comparePassword, hashPassword, signToken } from "../utils/auth.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.js";
 import { httpError } from "../utils/httpError.js";
+import { verifySmtpConnection } from "../services/emailService.js";
 
 const router = Router();
 
@@ -134,7 +135,9 @@ router.post("/admin/login", async (req, res, next) => {
     // Preferred path: authenticate against PostgreSQL admin_accounts.
     try {
       const dbAdmin = await query(
-        `SELECT id, full_name, email, password_hash
+        `SELECT id, full_name, email, password_hash,
+                COALESCE(role, 'admin') AS role,
+                COALESCE(is_suspended, false) AS is_suspended
          FROM admin_accounts
          WHERE email = $1 AND is_active = true
          LIMIT 1`,
@@ -143,20 +146,17 @@ router.post("/admin/login", async (req, res, next) => {
 
       if (dbAdmin.rowCount) {
         const account = dbAdmin.rows[0];
+        if (account.is_suspended) return next(httpError(403, "This account has been suspended"));
         const isValid = await comparePassword(payload.password, account.password_hash);
         if (!isValid) return next(httpError(401, "Invalid admin credentials"));
 
         await query("UPDATE admin_accounts SET last_login_at = NOW() WHERE id = $1", [account.id]);
 
-        const token = signToken({ sub: account.id, role: "admin", email: account.email });
+        const role = account.role || "admin";
+        const token = signToken({ sub: account.id, role, email: account.email });
         return res.json({
           token,
-          user: {
-            id: account.id,
-            role: "admin",
-            email: account.email,
-            full_name: account.full_name,
-          },
+          user: { id: account.id, role, email: account.email, full_name: account.full_name },
         });
       }
     } catch (dbErr) {
@@ -181,10 +181,25 @@ router.post("/admin/login", async (req, res, next) => {
   }
 });
 
+const ADMIN_ROLES = new Set(["super_admin", "admin", "support", "finance", "marketing", "moderator"]);
+
 router.get("/me", requireAuth, async (req, res, next) => {
   try {
-    if (req.user.role === "admin") {
-      return res.json({ id: "admin", role: "admin", email: req.user.email || config.adminEmail });
+    if (ADMIN_ROLES.has(req.user.role)) {
+      try {
+        const result = await query(
+          `SELECT id, full_name, email, role, is_active, last_login_at FROM admin_accounts WHERE id = $1 LIMIT 1`,
+          [req.user.sub]
+        );
+        if (result.rowCount) {
+          const a = result.rows[0];
+          return res.json({ id: a.id, role: a.role, email: a.email, full_name: a.full_name });
+        }
+      } catch (dbErr) {
+        if (dbErr?.code !== "42P01") throw dbErr;
+      }
+      // fallback for env-based admin or pre-migration
+      return res.json({ id: req.user.sub || "admin", role: req.user.role, email: req.user.email || config.adminEmail });
     }
 
     const result = await query(
@@ -194,6 +209,15 @@ router.get("/me", requireAuth, async (req, res, next) => {
 
     if (!result.rowCount) return next(httpError(404, "User not found"));
     return res.json({ ...result.rows[0], role: "creator" });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/smtp-health", requireAdmin, async (_req, res, next) => {
+  try {
+    const status = await verifySmtpConnection();
+    res.status(status.ok ? 200 : 503).json(status);
   } catch (err) {
     next(err);
   }

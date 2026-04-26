@@ -1,466 +1,326 @@
-import { listEvents } from "@/api/eventsApi";
-import { listRegistrations } from "@/api/registrationsApi";
-import { listSiteSessions, listEventFeedback } from "@/api/analyticsApi";
 import { useQuery } from "@tanstack/react-query";
-import * as XLSX from "xlsx";
+import { Link } from "react-router-dom";
+import { fetchAdminStats, fetchAdminGrowth } from "@/api/adminApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Users, CheckCircle2, Clock, Globe2, Timer, Download, FileSpreadsheet } from "lucide-react";
 import { motion } from "framer-motion";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, CartesianGrid } from "recharts";
+import {
+  CalendarDays, Users, UserCog, CreditCard, TrendingUp,
+  Clock, CheckCircle2, XCircle, Star, Globe2, ArrowRight,
+  AlertTriangle, BarChart3, Zap,
+} from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid, Legend,
+} from "recharts";
 
-const browserColors = ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#6b7280"];
+const fmt = (n) => Number(n || 0).toLocaleString("fr-FR");
+const fmtXAF = (n) => `${fmt(Math.round(Number(n || 0)))} FCFA`;
 
-const toCsv = (rows) => {
-  if (!rows.length) return "";
-  const headers = Object.keys(rows[0]);
-  return [
-    headers.join(";"),
-    ...rows.map((row) => headers.map((h) => `"${String(row[h] ?? "").replaceAll('"', '""')}"`).join(";")),
-  ].join("\n");
-};
+function KPICard({ title, value, sub, icon: Icon, color, trend, to, delay = 0 }) {
+  const card = (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay }}
+    >
+      <Card className="hover:shadow-md transition-shadow cursor-default group">
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+              <Icon className="w-5 h-5" />
+            </div>
+            {trend !== undefined && (
+              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${trend >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>
+                {trend >= 0 ? "+" : ""}{trend}%
+              </span>
+            )}
+          </div>
+          <div className="mt-3">
+            <p className="text-2xl font-bold tracking-tight">{value}</p>
+            <p className="text-sm text-muted-foreground mt-0.5">{title}</p>
+            {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+          </div>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
+  return to ? <Link to={to}>{card}</Link> : card;
+}
 
-const downloadBlob = (content, fileName, type) => {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.click();
-  URL.revokeObjectURL(url);
-};
+function StatusRow({ label, value, color }) {
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <div className="flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${color}`} />
+        <span className="text-sm text-muted-foreground">{label}</span>
+      </div>
+      <span className="text-sm font-semibold">{fmt(value)}</span>
+    </div>
+  );
+}
 
 export default function Dashboard() {
-  const { data: events = [] } = useQuery({
-    queryKey: ["admin-events"],
-    queryFn: () => listEvents({ sort: "-created_date" }),
+  const { data: stats, isLoading: loadingStats } = useQuery({
+    queryKey: ["admin-stats"],
+    queryFn: fetchAdminStats,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
-  const { data: registrations = [] } = useQuery({
-    queryKey: ["admin-registrations"],
-    queryFn: () => listRegistrations({ sort: "-created_date" }),
-    refetchInterval: 30_000,
-    refetchOnMount: "always",
+  const { data: growth } = useQuery({
+    queryKey: ["admin-growth"],
+    queryFn: () => fetchAdminGrowth(6),
+    staleTime: 300_000,
   });
 
-  const { data: sessions = [] } = useQuery({
-    queryKey: ["admin-site-sessions"],
-    queryFn: () => listSiteSessions({ sort: "-started_at" }),
-    refetchOnMount: "always",
+  if (loadingStats) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  const ev = stats?.events || {};
+  const reg = stats?.registrations || {};
+  const org = stats?.organizers || {};
+  const pay = stats?.payments || {};
+  const sess = stats?.sessions || {};
+
+  // Build growth chart — merge registrations + events by month
+  const growthData = (growth?.registrations || []).map((r) => {
+    const ev = (growth?.events || []).find((e) => e.month === r.month);
+    const org = (growth?.organizers || []).find((o) => o.month === r.month);
+    return {
+      month: r.month,
+      inscriptions: parseInt(r.count),
+      evenements: ev ? parseInt(ev.count) : 0,
+      organisateurs: org ? parseInt(org.count) : 0,
+    };
   });
-
-  const { data: feedbackItems = [] } = useQuery({
-    queryKey: ["admin-feedback"],
-    queryFn: () => listEventFeedback({ sort: "-created_date" }),
-    refetchOnMount: "always",
-  });
-
-  const totalMinutes = sessions.reduce((acc, session) => acc + Number(session.minutes_spent || 0), 0);
-  const uniqueVisitors = new Set(sessions.map((session) => session.id)).size;
-  const averageMinutes = sessions.length ? Math.round(totalMinutes / sessions.length) : 0;
-  const userCreatedEvents = events.filter((event) => event.submitted_by_user);
-  const averageFeedback = feedbackItems.length
-    ? (feedbackItems.reduce((acc, item) => acc + Number(item.rating || 0), 0) / feedbackItems.length).toFixed(1)
-    : "0.0";
-
-  const browserMap = sessions.reduce((acc, session) => {
-    const key = session.browser_full || session.browser || "Autre";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const browserData = Object.entries(browserMap).map(([name, value]) => ({ name, value }));
-
-  const deviceTypeMap = sessions.reduce((acc, session) => {
-    const key = session.device_type || "Unknown";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const deviceTypeData = Object.entries(deviceTypeMap).map(([name, value]) => ({ name, value }));
-
-  const osMap = sessions.reduce((acc, session) => {
-    const key = session.os || "Unknown";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const osData = Object.entries(osMap).map(([name, value]) => ({ name, value }));
-
-  const locationMap = sessions.reduce((acc, session) => {
-    const key = session.country || session.city || "Inconnu";
-    acc[key] = (acc[key] || 0) + 1;
-    return acc;
-  }, {});
-  const locationData = Object.entries(locationMap)
-    .map(([location, visits]) => ({ location, visits }))
-    .sort((a, b) => b.visits - a.visits)
-    .slice(0, 8);
-
-  const preciseGeoSessions = sessions.filter(
-    (session) => typeof session.geo_latitude === "number" && typeof session.geo_longitude === "number"
-  );
-
-  const exportAnalyticsCsv = () => {
-    const rows = sessions.map((session) => ({
-      session_id: session.id,
-      started_at: session.started_at || "",
-      ended_at: session.ended_at || "",
-      last_seen_at: session.last_seen_at || "",
-      minutes_spent: session.minutes_spent || 0,
-      browser: session.browser || "",
-      country: session.country || "",
-      city: session.city || "",
-      region: session.region || "",
-      timezone: session.timezone || "",
-      page_paths: (session.page_paths || []).join(" | "),
-      user_agent: session.user_agent || "",
-      referrer: session.referrer || "",
-      language: session.language || "",
-      browser_full: session.browser_full || "",
-      browser_version: session.browser_version || "",
-      os: session.os || "",
-      device_type: session.device_type || "",
-      geo_source: session.geo_source || "",
-      geo_latitude: session.geo_latitude ?? "",
-      geo_longitude: session.geo_longitude ?? "",
-      geo_accuracy_m: session.geo_accuracy_m ?? "",
-      geo_altitude_m: session.geo_altitude_m ?? "",
-      geo_heading_deg: session.geo_heading_deg ?? "",
-      geo_speed_mps: session.geo_speed_mps ?? "",
-    }));
-    downloadBlob(`\uFEFF${toCsv(rows)}`, `analytics-sessions-${Date.now()}.csv`, "text/csv;charset=utf-8;");
-  };
-
-  const exportAnalyticsExcel = () => {
-    const rows = sessions.map((session) => ({
-      session_id: session.id,
-      started_at: session.started_at || "",
-      ended_at: session.ended_at || "",
-      last_seen_at: session.last_seen_at || "",
-      minutes_spent: session.minutes_spent || 0,
-      browser: session.browser || "",
-      country: session.country || "",
-      city: session.city || "",
-      region: session.region || "",
-      timezone: session.timezone || "",
-      page_paths: (session.page_paths || []).join(" | "),
-      user_agent: session.user_agent || "",
-      referrer: session.referrer || "",
-      language: session.language || "",
-      browser_full: session.browser_full || "",
-      browser_version: session.browser_version || "",
-      os: session.os || "",
-      device_type: session.device_type || "",
-      geo_source: session.geo_source || "",
-      geo_latitude: session.geo_latitude ?? "",
-      geo_longitude: session.geo_longitude ?? "",
-      geo_accuracy_m: session.geo_accuracy_m ?? "",
-      geo_altitude_m: session.geo_altitude_m ?? "",
-      geo_heading_deg: session.geo_heading_deg ?? "",
-      geo_speed_mps: session.geo_speed_mps ?? "",
-    }));
-    const sheet = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, sheet, "Sessions");
-    XLSX.writeFile(wb, `analytics-sessions-${Date.now()}.xlsx`);
-  };
-
-  const stats = [
-    {
-      title: "Total événements",
-      value: events.length,
-      icon: CalendarDays,
-      color: "bg-primary/10 text-primary",
-    },
-    {
-      title: "Événements publiés",
-      value: events.filter((e) => e.status === "publie").length,
-      icon: CheckCircle2,
-      color: "bg-emerald-100 text-emerald-700",
-    },
-    {
-      title: "Inscriptions totales",
-      value: registrations.length,
-      icon: Users,
-      color: "bg-accent/20 text-accent",
-    },
-    {
-      title: "En attente de validation",
-      value: registrations.filter((r) => r.status === "en_attente").length,
-      icon: Clock,
-      color: "bg-amber-100 text-amber-700",
-    },
-    {
-      title: "Visiteurs uniques",
-      value: uniqueVisitors,
-      icon: Globe2,
-      color: "bg-sky-100 text-sky-700",
-    },
-    {
-      title: "Temps moyen (min)",
-      value: averageMinutes,
-      icon: Timer,
-      color: "bg-violet-100 text-violet-700",
-    },
-  ];
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-        {stats.map((stat, i) => (
-          <motion.div
-            key={stat.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-          >
-            <Card>
-              <CardContent className="p-5">
-                <div className="flex items-center gap-4">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${stat.color}`}>
-                    <stat.icon className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">{stat.title}</p>
-                    <p className="text-2xl font-bold">{stat.value}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard Global</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Vue CEO — plateforme EventFlow en temps réel</p>
+        </div>
+        <div className="flex gap-2">
+          {(stats?.pending_events || 0) > 0 && (
+            <Link to="/admin/events">
+              <Button variant="outline" size="sm" className="gap-2 border-amber-300 text-amber-700 hover:bg-amber-50">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {stats.pending_events} événement{stats.pending_events > 1 ? "s" : ""} à approuver
+              </Button>
+            </Link>
+          )}
+          <Link to="/admin/analytics">
+            <Button size="sm" className="gap-2">
+              <BarChart3 className="w-3.5 h-3.5" />
+              Analytics
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      <div className="flex gap-2 flex-wrap mb-6">
-        <Button variant="outline" className="gap-2" onClick={exportAnalyticsCsv}>
-          <Download className="w-4 h-4" /> Export analytics CSV
-        </Button>
-        <Button variant="outline" className="gap-2" onClick={exportAnalyticsExcel}>
-          <FileSpreadsheet className="w-4 h-4" /> Export analytics Excel
-        </Button>
+      {/* KPI Grid principale */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          title="Événements total"
+          value={fmt(ev.total)}
+          sub={`${fmt(ev.published)} publiés · ${fmt(ev.upcoming)} à venir`}
+          icon={CalendarDays}
+          color="bg-blue-100 text-blue-700"
+          to="/admin/events"
+          delay={0}
+        />
+        <KPICard
+          title="Inscriptions"
+          value={fmt(reg.total)}
+          sub={`${fmt(reg.last_30d)} ce mois · ${fmt(reg.last_24h)} aujourd'hui`}
+          icon={Users}
+          color="bg-emerald-100 text-emerald-700"
+          to="/admin/registrations"
+          delay={0.05}
+        />
+        <KPICard
+          title="Organisateurs"
+          value={fmt(org.total)}
+          sub={`${fmt(org.verified)} vérifiés · ${fmt(org.new_this_month)} ce mois`}
+          icon={UserCog}
+          color="bg-violet-100 text-violet-700"
+          to="/admin/organizers"
+          delay={0.1}
+        />
+        <KPICard
+          title="Revenus plateforme"
+          value={fmtXAF(pay.completed_amount)}
+          sub={`${fmt(pay.completed)} paiements confirmés`}
+          icon={CreditCard}
+          color="bg-amber-100 text-amber-700"
+          to="/admin/revenue"
+          delay={0.15}
+        />
       </div>
 
+      {/* Ligne 2 : métriques secondaires */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          title="Sessions visiteurs"
+          value={fmt(sess.total_sessions)}
+          sub={`${fmt(sess.last_24h)} dernières 24h`}
+          icon={Globe2}
+          color="bg-sky-100 text-sky-700"
+          delay={0.2}
+        />
+        <KPICard
+          title="Revenus 30 derniers jours"
+          value={fmtXAF(pay.last_30d_amount)}
+          icon={TrendingUp}
+          color="bg-rose-100 text-rose-700"
+          to="/admin/revenue"
+          delay={0.25}
+        />
+        <KPICard
+          title="Événements en avant"
+          value={fmt(stats?.featured_events)}
+          icon={Star}
+          color="bg-yellow-100 text-yellow-700"
+          to="/admin/marketplace"
+          delay={0.3}
+        />
+        <KPICard
+          title="Organisateurs suspendus"
+          value={fmt(org.suspended)}
+          icon={XCircle}
+          color="bg-red-100 text-red-700"
+          to="/admin/organizers"
+          delay={0.35}
+        />
+      </div>
+
+      {/* Charts row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Growth chart */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Croissance — 6 derniers mois</CardTitle>
+          </CardHeader>
+          <CardContent className="h-64">
+            {growthData.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-muted-foreground text-sm">Pas encore de données</div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={growthData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="inscGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="evGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12 }} />
+                  <Area type="monotone" dataKey="inscriptions" stroke="#10b981" fill="url(#inscGrad)" strokeWidth={2} />
+                  <Area type="monotone" dataKey="evenements" stroke="#3b82f6" fill="url(#evGrad)" strokeWidth={2} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Status breakdown */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">État des inscriptions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border">
+              <StatusRow label="Validées" value={reg.confirmed} color="bg-emerald-500" />
+              <StatusRow label="En attente" value={reg.pending} color="bg-amber-500" />
+              <StatusRow label="Annulées" value={reg.cancelled} color="bg-red-400" />
+            </div>
+            <div className="mt-4 pt-4 border-t">
+              <p className="text-xs text-muted-foreground mb-2">Paiements</p>
+              <StatusRow label="Complétés" value={pay.completed} color="bg-emerald-500" />
+              <StatusRow label="En attente" value={pay.pending} color="bg-amber-500" />
+              <StatusRow label="Échoués" value={pay.failed} color="bg-red-400" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent events + Quick actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Derniers événements */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Derniers événements</CardTitle>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Derniers événements</CardTitle>
+            <Link to="/admin/events">
+              <Button variant="ghost" size="sm" className="gap-1 text-xs">Voir tout <ArrowRight className="w-3 h-3" /></Button>
+            </Link>
           </CardHeader>
           <CardContent>
-            {events.slice(0, 5).length === 0 ? (
-              <p className="text-muted-foreground text-sm">Aucun événement</p>
-            ) : (
-              <div className="space-y-3">
-                {events.slice(0, 5).map((e) => (
-                  <div key={e.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <div>
-                      <p className="font-medium text-sm">{e.title}</p>
-                      <p className="text-xs text-muted-foreground">{e.city}</p>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      e.status === "publie" ? "bg-emerald-100 text-emerald-700" : 
-                      e.status === "brouillon" ? "bg-muted text-muted-foreground" : 
-                      "bg-red-100 text-red-700"
-                    }`}>
-                      {e.status}
-                    </span>
+            <div className="space-y-2">
+              {(stats?.recent_events || []).length === 0 && (
+                <p className="text-sm text-muted-foreground">Aucun événement</p>
+              )}
+              {(stats?.recent_events || []).map((e) => (
+                <div key={e.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{e.title}</p>
+                    <p className="text-xs text-muted-foreground">{e.city} · {e.registration_count} inscrit(s)</p>
                   </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Dernières inscriptions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {registrations.slice(0, 5).length === 0 ? (
-              <p className="text-muted-foreground text-sm">Aucune inscription</p>
-            ) : (
-              <div className="space-y-3">
-                {registrations.slice(0, 5).map((r) => (
-                  <div key={r.id} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                    <div>
-                      <p className="font-medium text-sm">{r.first_name} {r.last_name}</p>
-                      <p className="text-xs text-muted-foreground">{r.email || r.phone}</p>
-                    </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${
-                      r.status === "validee" ? "bg-emerald-100 text-emerald-700" : 
-                      r.status === "en_attente" ? "bg-amber-100 text-amber-700" : 
-                      "bg-red-100 text-red-700"
-                    }`}>
-                      {r.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Visites par localisation</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            {locationData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucune donnée de localisation pour le moment.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={locationData} margin={{ top: 8, right: 8, left: 0, bottom: 24 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="location" angle={-20} textAnchor="end" interval={0} height={60} />
-                  <YAxis allowDecimals={false} />
-                  <Tooltip />
-                  <Bar dataKey="visits" fill="#0ea5e9" radius={[6, 6, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Navigateurs utilisés</CardTitle>
-          </CardHeader>
-          <CardContent className="h-72">
-            {browserData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucune donnée navigateur pour le moment.</p>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={browserData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={90} label>
-                    {browserData.map((entry, index) => (
-                      <Cell key={entry.name} fill={browserColors[index % browserColors.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Types d'appareils</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {deviceTypeData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucune donnée appareil.</p>
-            ) : (
-              <div className="space-y-2">
-                {deviceTypeData.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between p-2 rounded-md bg-muted/40">
-                    <span className="text-sm">{item.name}</span>
-                    <span className="text-sm font-semibold">{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Systèmes d'exploitation</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {osData.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucune donnée OS.</p>
-            ) : (
-              <div className="space-y-2">
-                {osData.map((item) => (
-                  <div key={item.name} className="flex items-center justify-between p-2 rounded-md bg-muted/40">
-                    <span className="text-sm">{item.name}</span>
-                    <span className="text-sm font-semibold">{item.value}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-lg">Géolocalisation appareil (arrière-plan)</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-3">
-            {preciseGeoSessions.length} session(s) avec coordonnées GPS récupérées en arrière-plan
-          </p>
-          {preciseGeoSessions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Aucune coordonnée GPS disponible pour le moment (permission de localisation requise côté utilisateur).
-            </p>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {preciseGeoSessions.slice(0, 20).map((session) => (
-                <div key={session.id} className="p-3 rounded-lg bg-muted/40 text-xs space-y-1">
-                  <p><strong>Session:</strong> {session.id}</p>
-                  <p><strong>Coordonnées:</strong> {session.geo_latitude}, {session.geo_longitude}</p>
-                  <p><strong>Précision:</strong> {session.geo_accuracy_m ?? "-"} m</p>
-                  <p><strong>Source:</strong> {session.geo_source || "ip"} · <strong>Navigateur:</strong> {session.browser_full || session.browser || "-"}</p>
+                  <Badge
+                    variant="outline"
+                    className={`text-xs shrink-0 ${
+                      e.status === "publie" ? "border-emerald-300 text-emerald-700 bg-emerald-50" :
+                      e.status === "brouillon" ? "border-muted text-muted-foreground" :
+                      "border-red-300 text-red-700 bg-red-50"
+                    }`}
+                  >
+                    {e.status}
+                  </Badge>
                 </div>
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Événements créés par des utilisateurs</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {userCreatedEvents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucun événement soumis par un utilisateur.</p>
-            ) : (
-              <div className="space-y-3">
-                {userCreatedEvents.slice(0, 8).map((event) => (
-                  <div key={event.id} className="p-3 rounded-lg bg-muted/50">
-                    <p className="font-medium text-sm">{event.title}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {event.organizer_name || "Organisateur inconnu"}
-                      {event.organizer_email ? ` · ${event.organizer_email}` : ""}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {event.city || "Ville non renseignée"} · {event.status}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
           </CardContent>
         </Card>
 
+        {/* Actions rapides */}
         <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Feedback participants</CardTitle>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Actions rapides</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground mb-3">
-              {feedbackItems.length} feedback(s) · Note moyenne {averageFeedback}/5
-            </p>
-            {feedbackItems.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Aucun retour pour le moment.</p>
-            ) : (
-              <div className="space-y-3">
-                {feedbackItems.slice(0, 8).map((item) => (
-                  <div key={item.id} className="p-3 rounded-lg bg-muted/50">
-                    <p className="font-medium text-sm">{item.event_title || "Événement"}</p>
-                    <p className="text-xs text-muted-foreground">{item.participant_name || item.participant_email || "Anonyme"} · {item.rating}/5</p>
-                    <p className="text-xs text-muted-foreground">{item.comment || "Sans commentaire"}</p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Approuver événements", to: "/admin/events", icon: CheckCircle2, color: "bg-emerald-50 hover:bg-emerald-100 text-emerald-700", count: stats?.pending_events },
+                { label: "Gérer organisateurs", to: "/admin/organizers", icon: UserCog, color: "bg-violet-50 hover:bg-violet-100 text-violet-700" },
+                { label: "Voir paiements", to: "/admin/payments", icon: CreditCard, color: "bg-amber-50 hover:bg-amber-100 text-amber-700" },
+                { label: "Analytics", to: "/admin/analytics", icon: BarChart3, color: "bg-sky-50 hover:bg-sky-100 text-sky-700" },
+                { label: "Marketing", to: "/admin/marketing", icon: Zap, color: "bg-rose-50 hover:bg-rose-100 text-rose-700" },
+                { label: "Paramètres", to: "/admin/settings", icon: Globe2, color: "bg-slate-50 hover:bg-slate-100 text-slate-700" },
+              ].map(({ label, to, icon: Icon, color, count }) => (
+                <Link key={to} to={to}>
+                  <div className={`flex flex-col gap-1.5 p-3 rounded-xl transition-colors cursor-pointer ${color}`}>
+                    <Icon className="w-5 h-5" />
+                    <span className="text-xs font-medium leading-tight">{label}</span>
+                    {count > 0 && <Badge className="w-fit bg-amber-500 text-white text-[10px] px-1 h-4">{count}</Badge>}
                   </div>
-                ))}
-              </div>
-            )}
+                </Link>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>

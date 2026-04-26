@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { query } from "../db.js";
+import { isTransientDbError, query } from "../db.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { buildWhereClause, parseLimit, parseSort } from "../utils/queryHelpers.js";
 
@@ -56,6 +56,9 @@ router.post("/", async (req, res, next) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
+    if (isTransientDbError(err)) {
+      return res.status(202).json({ ok: false, queued: false, reason: "analytics_db_temporarily_unavailable" });
+    }
     next(err);
   }
 });

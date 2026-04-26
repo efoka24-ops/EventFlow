@@ -16,15 +16,19 @@ const run = async () => {
   const passwordHash = await hashPassword(password);
 
   const sql = `
-    INSERT INTO admin_accounts (full_name, email, password_hash, is_active)
-    VALUES ($1, $2, $3, true)
+    INSERT INTO admin_accounts (full_name, email, password_hash, is_active, role)
+    VALUES ($1, $2, $3, true, 'super_admin')
     ON CONFLICT (email)
     DO UPDATE SET
       full_name = EXCLUDED.full_name,
       password_hash = EXCLUDED.password_hash,
       is_active = true,
+      role = CASE
+        WHEN admin_accounts.role = 'admin' THEN 'super_admin'
+        ELSE admin_accounts.role
+      END,
       updated_date = NOW()
-    RETURNING id, full_name, email, is_active, created_date, updated_date
+    RETURNING id, full_name, email, role, is_active, created_date, updated_date
   `;
 
   const { rows } = await query(sql, [fullName, email, passwordHash]);

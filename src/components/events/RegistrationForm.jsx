@@ -9,12 +9,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Mail, Loader2, CheckCircle2, User, Download, Smartphone, AlertCircle, Clock, ExternalLink } from "lucide-react";
+import { Mail, Loader2, CheckCircle2, User, Download, Smartphone, AlertCircle, Clock, ExternalLink, Ticket } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "react-router-dom";
 import { generateTicketPDF } from "@/utils/generateTicket";
-import { normalizeParticipantEmail } from "@/lib/participantSession";
+import { getGeolocation } from "@/utils/geolocation";
+import { getParticipantEmail, normalizeParticipantEmail, setParticipantEmail } from "@/lib/participantSession";
 import { trackUserAction } from "@/lib/trackUserAction";
+import RegistrationFlowHeader from "@/components/events/RegistrationFlowHeader";
+import SmartSignupTeaser from "@/components/events/SmartSignupTeaser";
 
 const isGmailEmail = (email) => /@gmail\.com$/i.test((email || "").trim());
 
@@ -141,6 +144,9 @@ export default function RegistrationForm({ event, onSuccess }) {
         if (status === "successful") {
           stopPolling();
           setCheckoutUrl(null);
+          if (savedRegistration?.email || formData.email) {
+            setParticipantEmail(savedRegistration?.email || formData.email);
+          }
           setPaymentMeta({
             campay_reference: data.payment?.campay_reference || null,
             operator: data.payment?.operator || null,
@@ -239,6 +245,14 @@ export default function RegistrationForm({ event, onSuccess }) {
   });
 
   useEffect(() => {
+    const participantEmail = getParticipantEmail();
+    if (participantEmail) {
+      setFormData((prev) => ({
+        ...prev,
+        email: prev.email || participantEmail,
+      }));
+    }
+
     Promise.resolve(getCreatorUser())
       .then((user) => {
         if (!user) throw new Error("no user");
@@ -254,69 +268,66 @@ export default function RegistrationForm({ event, onSuccess }) {
         }));
       })
       .catch(() => {
-        // Keep anonymous users on the single registration form.
+        const participantEmail = getParticipantEmail();
+        if (!participantEmail) return;
+        setFormData((prev) => ({
+          ...prev,
+          email: prev.email || participantEmail,
+        }));
       });
   }, []);
 
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          const latitude = pos.coords.latitude;
-          const longitude = pos.coords.longitude;
-          const accuracy = pos.coords.accuracy || null;
+    getGeolocation()
+      .then(async (geoData) => {
+        if (!geoData) {
+          setGeo((prev) => ({
+            ...prev,
+            loading: false,
+            error: "Géolocalisation non disponible",
+          }));
+          return;
+        }
 
+        const { latitude, longitude, accuracy } = geoData;
+        setGeo((prev) => ({
+          ...prev,
+          latitude,
+          longitude,
+          accuracy,
+          loading: true,
+          error: null,
+        }));
+
+        try {
+          const location = await reverseGeocode(latitude, longitude);
+          setGeo((prev) => ({
+            ...prev,
+            ...location,
+            latitude,
+            longitude,
+            accuracy,
+            loading: false,
+            error: null,
+          }));
+        } catch {
           setGeo((prev) => ({
             ...prev,
             latitude,
             longitude,
             accuracy,
-            loading: true,
-            error: null,
-          }));
-
-          try {
-            const location = await reverseGeocode(latitude, longitude);
-            setGeo((prev) => ({
-              ...prev,
-              ...location,
-              latitude,
-              longitude,
-              accuracy,
-              loading: false,
-              error: null,
-            }));
-          } catch {
-            setGeo((prev) => ({
-              ...prev,
-              latitude,
-              longitude,
-              accuracy,
-              loading: false,
-              error: "Localisation textuelle indisponible",
-            }));
-          }
-        },
-        () => {
-          setGeo((prev) => ({
-            ...prev,
             loading: false,
-            error: "Géolocalisation refusée ou indisponible",
+            error: "Localisation textuelle indisponible",
           }));
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 300000,
         }
-      );
-    } else {
-      setGeo((prev) => ({
-        ...prev,
-        loading: false,
-        error: "Géolocalisation non supportée",
-      }));
-    }
+      })
+      .catch(() => {
+        setGeo((prev) => ({
+          ...prev,
+          loading: false,
+          error: "Géolocalisation refusée ou indisponible",
+        }));
+      });
   }, []);
 
   const handleChange = (field, value) => {
@@ -325,6 +336,15 @@ export default function RegistrationForm({ event, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const normalizedEmail = normalizeParticipantEmail(formData.email);
+    const normalizedPhone = String(formData.phone || "").trim();
+
+    if (!normalizedEmail && !normalizedPhone) {
+      toast.error("Renseignez au moins un email ou un numero de telephone.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -335,16 +355,16 @@ export default function RegistrationForm({ event, onSuccess }) {
         event_id: event.id,
         first_name: formData.first_name,
         last_name: formData.last_name,
-        email: normalizeParticipantEmail(formData.email) || undefined,
-        phone: formData.phone || undefined,
+        email: normalizedEmail || undefined,
+        phone: normalizedPhone || undefined,
         gender: formData.gender || undefined,
-        geo_latitude: geo.latitude,
-        geo_longitude: geo.longitude,
-        geo_accuracy: geo.accuracy,
-        geo_location_label: geo.label,
-        geo_city: geo.city,
-        geo_region: geo.region,
-        geo_country: geo.country,
+        geo_latitude: geo.latitude ?? undefined,
+        geo_longitude: geo.longitude ?? undefined,
+        geo_accuracy: geo.accuracy ?? undefined,
+        geo_location_label: geo.label ?? undefined,
+        geo_city: geo.city ?? undefined,
+        geo_region: geo.region ?? undefined,
+        geo_country: geo.country ?? undefined,
         email_provider: emailProvider,
         has_gmail_account: hasGmailAccount,
         status: isPaidEvent ? "en_attente_paiement" : "en_attente",
@@ -354,6 +374,9 @@ export default function RegistrationForm({ event, onSuccess }) {
       const created = await createRegistration(registrationData);
       const reg = created || { ...registrationData, id: Date.now().toString(), created_date: new Date().toISOString() };
       setSavedRegistration(reg);
+      if (registrationData.email) {
+        setParticipantEmail(registrationData.email);
+      }
 
       trackUserAction({
         action: "event_registration_created",
@@ -375,8 +398,8 @@ export default function RegistrationForm({ event, onSuccess }) {
         toast.success("Inscription envoyée avec succès !");
         if (onSuccess) onSuccess();
       }
-    } catch {
-      toast.error("Impossible d'envoyer l'inscription pour le moment. Réessayez dans quelques instants.");
+    } catch (err) {
+      toast.error(err?.message || "Impossible d'envoyer l'inscription pour le moment. Réessayez dans quelques instants.");
     } finally {
       setLoading(false);
     }
@@ -386,32 +409,13 @@ export default function RegistrationForm({ event, onSuccess }) {
   const emailProvider = detectEmailProvider(formData.email);
   const hasGmailAccount = isGmailEmail(formData.email) || isGmailEmail(currentUser?.email);
 
-  if (!currentUser) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Compte requis pour s'inscrire</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Vous pouvez consulter tous les evenements, mais l'inscription exige un compte.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <Link to="/submit-event?auth=login">
-              <Button className="w-full" variant="outline">Se connecter</Button>
-            </Link>
-            <Link to="/submit-event?auth=signup">
-              <Button className="w-full">Creer un compte</Button>
-            </Link>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   if (paymentStep && !success) {
     return (
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="mb-4">
+          <RegistrationFlowHeader currentStep="payment" />
+        </div>
+
         {/* Checkout modal */}
         <Dialog open={!!checkoutUrl} onOpenChange={(open) => { if (!open) setCheckoutUrl(null); }}>
           <DialogContent className="max-w-lg w-full p-0 overflow-hidden" style={{ height: "85vh" }}>
@@ -528,49 +532,30 @@ export default function RegistrationForm({ event, onSuccess }) {
 
     return (
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-        <Dialog open={showTicketsPrompt} onOpenChange={setShowTicketsPrompt}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Inscription terminee</DialogTitle>
-              <DialogDescription>
-                Choisissez l'action suivante: consulter vos billets ou acceder a la connexion/creation de compte.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                {currentUser
-                  ? "Voulez-vous consulter maintenant le statut de votre billet ?"
-                  : "Pour voir vos billets, connectez-vous ou creez votre compte."}
-              </p>
-              {currentUser ? (
-                <Link to="/participant/tickets" className="block" onClick={() => setShowTicketsPrompt(false)}>
-                  <Button className="w-full">Voir mes billets</Button>
-                </Link>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <Link to="/submit-event?auth=login" className="block" onClick={() => setShowTicketsPrompt(false)}>
-                    <Button className="w-full" variant="outline">Se connecter</Button>
-                  </Link>
-                  <Link to="/submit-event?auth=signup" className="block" onClick={() => setShowTicketsPrompt(false)}>
-                    <Button className="w-full">Creer un compte</Button>
-                  </Link>
-                </div>
-              )}
-            </div>
-          </DialogContent>
-        </Dialog>
+        <div className="mb-4">
+          <RegistrationFlowHeader currentStep="confirmation" />
+        </div>
 
-        <Card className="py-8">
-          <CardContent className="space-y-6">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-8 h-8 text-emerald-600" />
+        <Card className="overflow-hidden">
+          <div className="bg-emerald-500 py-6 px-4 text-center">
+            <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+              <CheckCircle2 className="w-8 h-8 text-white" />
             </div>
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-bold">Inscription réussie !</h3>
-              <p className="text-muted-foreground">
-                Votre inscription à <strong>{event.title}</strong> est en attente de validation.
-                {formData.email && " Vous recevrez un email de confirmation."}
-              </p>
+            <h3 className="text-xl font-bold text-white">Inscription réussie !</h3>
+            <p className="text-emerald-100 text-sm mt-1">{event.title}</p>
+          </div>
+          <CardContent className="space-y-4 pt-5">
+            {formData.email && (
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800">
+                <Mail className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">Email de confirmation envoyé</p>
+                  <p className="text-xs text-blue-700 dark:text-blue-400">Un email avec votre billet a été envoyé à <strong>{formData.email}</strong></p>
+                </div>
+              </div>
+            )}
+            <div className="text-center text-sm text-muted-foreground">
+              Votre inscription est <strong>en attente de validation</strong> par l'organisateur.
             </div>
             <Button
               onClick={handleDownloadTicket}
@@ -579,12 +564,12 @@ export default function RegistrationForm({ event, onSuccess }) {
               variant="outline"
             >
               {ticketLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {ticketLoading ? "Génération du billet..." : "Télécharger mon billet (PDF)"}
+              {ticketLoading ? "Génération..." : "Télécharger mon billet (PDF)"}
             </Button>
-            {currentUser && (
-              <Link to="/participant/tickets" className="block">
-                <Button className="w-full" variant="secondary">
-                  Voir le statut de mon billet
+            {formData.email && (
+              <Link to={`/participant/tickets?email=${encodeURIComponent(formData.email)}`} className="block">
+                <Button className="w-full gap-2" variant="secondary">
+                  <Ticket className="w-4 h-4" /> Accéder à mes billets
                 </Button>
               </Link>
             )}
@@ -599,6 +584,8 @@ export default function RegistrationForm({ event, onSuccess }) {
         <CardTitle className="text-lg">S'inscrire à cet événement</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
+        <RegistrationFlowHeader currentStep="form" />
+
         {currentUser && (
           <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/20">
             <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -637,20 +624,20 @@ export default function RegistrationForm({ event, onSuccess }) {
             </div>
             {!currentUser && (
               <div className="space-y-1.5">
-                <Label>Email</Label>
+                <Label>Email <span className="text-muted-foreground text-xs">(pour recevoir votre billet)</span></Label>
                 <Input
                   type="email"
                   value={formData.email}
                   onChange={(e) => handleChange("email", e.target.value)}
-                  placeholder="optionnel"
+                  placeholder="votre@email.com"
                 />
               </div>
             )}
             <div className="grid grid-cols-2 gap-3">
               {(!currentUser || !currentUser.phone) && (
                 <div className="space-y-1.5">
-                  <Label>Téléphone *</Label>
-                  <Input required type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} placeholder="+237 6XX XX XX XX" />
+                  <Label>Téléphone</Label>
+                  <Input type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} placeholder="+237 6XX XX XX XX" />
                 </div>
               )}
               <div className={`space-y-1.5 ${(!currentUser || !currentUser.phone) ? "" : "col-span-2"}`}>
