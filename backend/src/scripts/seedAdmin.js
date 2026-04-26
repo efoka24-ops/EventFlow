@@ -1,6 +1,8 @@
 import { query, pool } from "../db.js";
 import { hashPassword } from "../utils/auth.js";
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const run = async () => {
   const emailRaw = process.env.ADMIN_EMAIL || "";
   const passwordRaw = process.env.ADMIN_PASSWORD || "";
@@ -31,8 +33,25 @@ const run = async () => {
     RETURNING id, full_name, email, role, is_active, created_date, updated_date
   `;
 
-  const { rows } = await query(sql, [fullName, email, passwordHash]);
-  console.log("[db:seed-admin] Admin account upserted:", rows[0]);
+  const delays = [0, 2000, 5000]; // 3 attempts: immediate, +2s, +5s
+  let lastError;
+
+  for (const delay of delays) {
+    if (delay > 0) {
+      console.log(`[db:seed-admin] Retrying in ${delay / 1000}s...`);
+      await sleep(delay);
+    }
+    try {
+      const { rows } = await query(sql, [fullName, email, passwordHash]);
+      console.log("[db:seed-admin] Admin account upserted:", rows[0]);
+      return;
+    } catch (err) {
+      lastError = err;
+      console.warn("[db:seed-admin] Attempt failed:", err.message);
+    }
+  }
+
+  throw lastError;
 };
 
 run()

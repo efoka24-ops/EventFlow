@@ -18,16 +18,21 @@ if (!hasDatabaseUrl) {
 try {
   console.log("[db:bootstrap] Running migrations...");
   run("node src/scripts/migrateDb.js");
-
-  if (hasAdminSeedInputs) {
-    console.log("[db:bootstrap] Seeding admin account...");
-    run("node src/scripts/seedAdmin.js");
-  } else {
-    console.log("[db:bootstrap] ADMIN_EMAIL/ADMIN_PASSWORD not set; skipping admin seed");
-  }
-
-  console.log("[db:bootstrap] Done");
 } catch (error) {
   console.error("[db:bootstrap] Failed:", error?.message || error);
   process.exit(1);
 }
+
+if (hasAdminSeedInputs) {
+  // Seed is idempotent — don't block server startup if it fails (admin may already exist)
+  try {
+    console.log("[db:bootstrap] Seeding admin account...");
+    run("node src/scripts/seedAdmin.js");
+  } catch {
+    console.warn("[db:bootstrap] Admin seed failed (non-fatal) — server will start anyway");
+  }
+} else {
+  console.log("[db:bootstrap] ADMIN_EMAIL/ADMIN_PASSWORD not set; skipping admin seed");
+}
+
+console.log("[db:bootstrap] Done");
