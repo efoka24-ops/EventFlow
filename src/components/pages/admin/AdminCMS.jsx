@@ -97,7 +97,7 @@ export default function AdminCMS() {
 
   const { data: settings = [], isLoading } = useQuery({
     queryKey: ["admin-settings"],
-    queryFn: fetchSettings,
+    queryFn: () => fetchSettings(),
     staleTime: 60_000,
   });
 

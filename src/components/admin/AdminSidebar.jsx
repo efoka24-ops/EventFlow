@@ -8,7 +8,7 @@ import { useAuth } from "@/libs/AuthContext";
 import {
   LayoutDashboard, Users, UserCog, CalendarDays, CreditCard, TrendingUp,
   Megaphone, Bell, FileText, ShieldAlert, Tag, BarChart3, KeyRound, Store,
-  Settings, ChevronDown, ChevronRight, Zap,
+  Settings, ChevronDown, ChevronRight, Zap, MessageSquareQuote,
 } from "lucide-react";
 
 // roles: omit to allow all; '*' = all; array = specific roles allowed
@@ -51,6 +51,7 @@ const NAV_GROUPS = [
     label: "Contenu & Config",
     items: [
       { label: "CMS", path: "/admin/cms", icon: FileText, roles: ["admin", "marketing"] },
+      { label: "Témoignages", path: "/admin/testimonials", icon: MessageSquareQuote, roles: ["admin", "marketing"] },
       { label: "Catégories", path: "/admin/categories", icon: Tag, roles: ["admin"] },
       { label: "Paramètres", path: "/admin/settings", icon: Settings, roles: ["super_admin"] },
     ],

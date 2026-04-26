@@ -11,6 +11,7 @@ import sponsorsRoutes from "./sponsors.js";
 import notificationsRoutes from "./notifications.js";
 import adminRoutes from "./admin.js";
 import publicSettingsRoutes from "./publicSettings.js";
+import testimonialsRoutes from "./testimonials.js";
 
 export const apiRouter = Router();
 
@@ -25,4 +26,5 @@ apiRouter.use("/payments", paymentsRoutes);
 apiRouter.use("/sponsors", sponsorsRoutes);
 apiRouter.use("/notifications", notificationsRoutes);
 apiRouter.use("/public-settings", publicSettingsRoutes);
+apiRouter.use("/testimonials", testimonialsRoutes);
 apiRouter.use("/admin", adminRoutes);

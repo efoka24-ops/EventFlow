@@ -69,7 +69,7 @@ export default function AdminSettings() {
 
   const { data: settings = [], isLoading } = useQuery({
     queryKey: ["admin-settings"],
-    queryFn: fetchSettings,
+    queryFn: () => fetchSettings(),
     staleTime: 60_000,
   });
 
@@ -87,6 +87,9 @@ export default function AdminSettings() {
 
   const categories = Object.keys(grouped);
 
+  // Auto-select first available category when data loads
+  const resolvedCategory = categories.includes(activeCategory) ? activeCategory : (categories[0] || "general");
+
   return (
     <div className="space-y-6">
       <div>
@@ -100,7 +103,7 @@ export default function AdminSettings() {
           {categories.map((cat) => {
             const meta = CATEGORY_META[cat] || { label: cat, icon: Settings, color: "bg-muted text-muted-foreground" };
             const Icon = meta.icon;
-            const isActive = activeCategory === cat;
+            const isActive = resolvedCategory === cat;
             return (
               <button
                 key={cat}

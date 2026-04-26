@@ -461,9 +461,24 @@ router.get("/revenue", async (req, res, next) => {
 
 router.get("/settings", async (req, res, next) => {
   try {
-    await ensurePlatformSettings(query);
+    // Sanitize category: reject React Query context objects passed accidentally
+    const rawCat = req.query.category;
+    const category = typeof rawCat === "string" && rawCat && rawCat !== "[object Object]" ? rawCat : undefined;
 
-    const { category } = req.query;
+    try {
+      await ensurePlatformSettings(query);
+    } catch (ensureErr) {
+      // Table doesn't exist yet — return in-memory defaults so the page still renders
+      if (ensureErr?.code === "42P01") {
+        const { PLATFORM_SETTING_DEFAULTS } = await import("../services/platformSettings.js");
+        const rows = category
+          ? PLATFORM_SETTING_DEFAULTS.filter((s) => s.category === category)
+          : PLATFORM_SETTING_DEFAULTS;
+        return res.json(rows);
+      }
+      throw ensureErr;
+    }
+
     let sql = `SELECT * FROM platform_settings`;
     const params = [];
     if (category) {

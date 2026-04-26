@@ -63,3 +63,10 @@ export const resolveReport = (id, data) => apiPatch(`/admin/reports/${id}/resolv
 
 // ─── ACTIVITY LOG ─────────────────────────────────────────────────────────────
 export const fetchActivityLog = () => apiGet("/admin/activity-log");
+
+// ─── TESTIMONIALS (admin) ─────────────────────────────────────────────────────
+export const listAdminTestimonials = () => apiGet("/testimonials/admin");
+export const createTestimonial = (data) => apiPost("/testimonials/admin", data);
+export const updateTestimonial = (id, data) => apiPatch(`/testimonials/admin/${id}`, data);
+export const toggleTestimonial = (id) => apiPatch(`/testimonials/admin/${id}/toggle`, {});
+export const deleteTestimonial = (id) => apiDelete(`/testimonials/admin/${id}`);

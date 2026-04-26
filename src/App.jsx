@@ -1,12 +1,14 @@
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "@/components/ui/sonner"
-import { QueryClientProvider } from '@tanstack/react-query'
+import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/libs/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
+import MaintenancePage from '@/components/pages/MaintenancePage';
+import { fetchPublicSettings } from '@/api/publicSettingsApi';
 import AdminLayout from '@/components/admin/AdminLayout';
 import Home from '@/components/pages/Home';
 import Events from '@/components/pages/Events';
@@ -37,6 +39,7 @@ import AdminAnalytics from '@/components/pages/admin/AdminAnalytics';
 import AdminMarketplace from '@/components/pages/admin/AdminMarketplace';
 import AdminCMS from '@/components/pages/admin/AdminCMS';
 import AdminRoles from '@/components/pages/admin/AdminRoles';
+import AdminTestimonials from '@/components/pages/admin/AdminTestimonials';
 import AdminPremium from '@/components/pages/admin/AdminPremium';
 import SiteAnalyticsTracker from '@/components/analytics/SiteAnalyticsTracker';
 import { getCreatorUser } from '@/lib/creatorSession';
@@ -70,16 +73,30 @@ const AdminRoute = ({ element, allowedRoles, user }) => {
 };
 
 const AuthenticatedApp = () => {
-  const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin, user } = useAuth();
+  const { isLoadingAuth, authError, navigateToLogin, user } = useAuth();
   const canAccessAdmin = isAdminUser(user);
 
-  // Show loading spinner while checking app public settings or auth
-  if (isLoadingPublicSettings || isLoadingAuth) {
+  const { data: publicSettings, isLoading: isLoadingPublicSettings } = useQuery({
+    queryKey: ["public-settings"],
+    queryFn: fetchPublicSettings,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+
+  const isMaintenanceMode = publicSettings?.maintenance_mode === true;
+
+  // Show loading spinner while checking auth
+  if (isLoadingAuth || isLoadingPublicSettings) {
     return (
       <div className="fixed inset-0 flex items-center justify-center">
         <div className="w-8 h-8 border-4 border-slate-200 border-t-slate-800 rounded-full animate-spin"></div>
       </div>
     );
+  }
+
+  // Maintenance mode: block public users, admins can still access
+  if (isMaintenanceMode && !canAccessAdmin) {
+    return <MaintenancePage />;
   }
 
   // Handle authentication errors
@@ -130,6 +147,7 @@ const AuthenticatedApp = () => {
           <Route path="/admin/notifications-system" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
           {/* Contenu & Config */}
           <Route path="/admin/cms" element={<AdminRoute element={<AdminCMS />} allowedRoles={["admin","marketing"]} user={user} />} />
+          <Route path="/admin/testimonials" element={<AdminRoute element={<AdminTestimonials />} allowedRoles={["admin","marketing"]} user={user} />} />
           <Route path="/admin/categories" element={<AdminRoute element={<AdminCategories />} allowedRoles={["admin"]} user={user} />} />
           <Route path="/admin/settings" element={<AdminRoute element={<AdminSettings />} allowedRoles={["super_admin"]} user={user} />} />
           {/* Sécurité */}
