@@ -36,7 +36,7 @@ const registrationSchema = z.object({
 router.get("/", requireAuth, async (req, res, next) => {
   try {
     const { sort, limit, ...rawFilters } = req.query;
-    const filters = { ...rawFilters };
+    let filters = { ...rawFilters };
     const isAdmin = req.user?.role === "admin";
     const isCreator = req.user?.role === "creator";
 
@@ -59,20 +59,32 @@ router.get("/", requireAuth, async (req, res, next) => {
       const eventIds = myEvents.map((e) => e.id);
       if (!eventIds.length) return res.json([]);
 
+      // Ignore any email filter for creators (prevent IDOR)
+      if (filters.email) delete filters.email;
       // If event_id filter present, validate it belongs to creator
       if (filters.event_id && !eventIds.includes(filters.event_id)) {
         return res.json([]);
       }
-      if (!filters.event_id) {
-        // Return all registrations for all their events
-        const { field, direction } = parseSort(sort, ["created_date", "updated_date"], "-created_date");
-        const parsedLimit = parseLimit(limit, null, 500);
-        const inClause = eventIds.map((_, i) => `$${i + 1}`).join(", ");
-        const sql = `SELECT * FROM registrations WHERE event_id IN (${inClause}) ORDER BY ${field} ${direction} ${parsedLimit ? `LIMIT $${eventIds.length + 1}` : ""}`;
-        const params = parsedLimit ? [...eventIds, parsedLimit] : eventIds;
-        const result = await query(sql, params);
-        return res.json(result.rows);
+      // For any query, always restrict to creator's events AND their own email
+      const { field, direction } = parseSort(sort, ["created_date", "updated_date"], "-created_date");
+      const parsedLimit = parseLimit(limit, null, 500);
+      let sql = `SELECT * FROM registrations WHERE event_id IN (${eventIds.map((_, i) => `$${i + 1}`).join(", ")}) AND LOWER(email) = $${eventIds.length + 1}`;
+      let params = [...eventIds, creatorEmail];
+      // Apply other filters (except email) if present
+      const allowedFilters = ["id", "phone", "status", "registration_method"];
+      for (const key of allowedFilters) {
+        if (filters[key]) {
+          sql += ` AND ${key} = $${params.length + 1}`;
+          params.push(filters[key]);
+        }
       }
+      sql += ` ORDER BY ${field} ${direction}`;
+      if (parsedLimit) {
+        sql += ` LIMIT $${params.length + 1}`;
+        params.push(parsedLimit);
+      }
+      const result = await query(sql, params);
+      return res.json(result.rows);
     } else if (!isAdmin) {
       return next(httpError(403, "Forbidden"));
     }
