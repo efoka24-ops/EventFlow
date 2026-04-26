@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPatch, apiDelete } from "./apiClient";
+import { apiGet, apiPost, apiPatch, apiDelete, apiRequest } from "./apiClient";
 
 const buildQs = (params = {}) => {
   const p = new URLSearchParams();
@@ -12,8 +12,13 @@ const buildQs = (params = {}) => {
 export const listRegistrations = (params = {}) =>
   apiGet(`/registrations${buildQs(params)}`);
 
+// Public — no auth required (Eventbrite-style)
 export const createRegistration = (data) =>
   apiPost("/registrations", data);
+
+// Public lookup by email — no auth required
+export const getMyTickets = (email) =>
+  apiRequest(`/registrations/my-tickets?email=${encodeURIComponent(email)}`, { method: "GET", token: null });
 
 export const updateRegistration = (id, data) =>
   apiPatch(`/registrations/${id}`, data);

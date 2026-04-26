@@ -5,6 +5,7 @@ import { pool } from "../db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "../../..");
 
 const MIGRATIONS_TABLE = "schema_migrations";
 
@@ -51,10 +52,32 @@ const applyMigration = async (migrationsDir, filename) => {
 };
 
 const run = async () => {
-  const migrationsDir = path.resolve(process.cwd(), "database/migrations");
+  const candidateDirs = [
+    path.resolve(process.cwd(), "database/migrations"),
+    path.resolve(projectRoot, "database/migrations"),
+  ];
+
+  const migrationsDir = candidateDirs[0];
+  let resolvedMigrationsDir = null;
+
+  for (const candidate of candidateDirs) {
+    try {
+      await readdir(candidate);
+      resolvedMigrationsDir = candidate;
+      break;
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  if (!resolvedMigrationsDir) {
+    throw new Error(`Unable to locate database migrations directory. Tried: ${candidateDirs.join(", ")}`);
+  }
+
+  console.log(`[db:migrate] Using migrations directory: ${resolvedMigrationsDir}`);
 
   await ensureMigrationsTable();
-  const files = await getMigrationFiles(migrationsDir);
+  const files = await getMigrationFiles(resolvedMigrationsDir);
   const applied = await getAppliedMigrations();
 
   let appliedCount = 0;
@@ -63,7 +86,7 @@ const run = async () => {
       console.log(`[db:migrate] Skipped ${filename} (already applied)`);
       continue;
     }
-    await applyMigration(migrationsDir, filename);
+    await applyMigration(resolvedMigrationsDir, filename);
     appliedCount += 1;
   }
 

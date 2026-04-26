@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,44 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Loader2, RefreshCw, Search, Eye, CheckCircle2, XCircle, Clock, CreditCard } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
+
+const OPERATOR_LABELS = {
+  MTN: "MTN Mobile Money",
+  MTNMOMO: "MTN Mobile Money",
+  CM_MTNMOMO: "MTN Mobile Money",
+  ORANGE: "Orange Money",
+  ORANGEMONEY: "Orange Money",
+  CM_OM: "Orange Money",
+};
+
+const normalizeOperator = (value) => String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+const detectOperatorFromPhone = (phone) => {
+  const digits = String(phone || "").replace(/\D/g, "");
+  const local = digits.startsWith("237") ? digits.slice(3) : digits;
+  if (local.startsWith("69")) return "ORANGE";
+  if (local.startsWith("65") || local.startsWith("67") || local.startsWith("68")) return "MTN";
+  return null;
+};
+
+const getOperatorInfo = (payment) => {
+  const rawCandidates = [
+    payment?.operator,
+    payment?.provider_response?.operator,
+    payment?.provider_response?.operator_name,
+    payment?.provider_response?.operator_id,
+  ].filter(Boolean);
+
+  const raw = rawCandidates[0] || detectOperatorFromPhone(payment?.phone_number);
+  if (!raw) return { label: "Inconnu", raw: "", source: "non fourni" };
+
+  const normalized = normalizeOperator(raw);
+  return {
+    label: OPERATOR_LABELS[normalized] || String(raw),
+    raw: String(raw),
+    source: rawCandidates.length ? "easy transac" : "déduit du numéro",
+  };
+};
 
 const fetchAdminPayments = async () => {
   const res = await fetch("/api/payments");
@@ -181,9 +219,14 @@ export default function AdminPayments() {
                       {Number(p.amount || 0).toLocaleString()} {p.currency || "XAF"}
                     </TableCell>
                     <TableCell>
-                      {p.operator ? (
-                        <Badge variant="outline" className="text-xs">{p.operator}</Badge>
-                      ) : "—"}
+                      {(() => {
+                        const operator = getOperatorInfo(p);
+                        return (
+                          <Badge variant="outline" className="text-xs">
+                            {operator.label}
+                          </Badge>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-0.5">
@@ -225,10 +268,20 @@ export default function AdminPayments() {
                 <div><p className="text-xs text-muted-foreground">Montant</p><p className="font-bold">{Number(selected.amount).toLocaleString()} {selected.currency}</p></div>
                 <div><p className="text-xs text-muted-foreground">Payeur</p><p className="font-medium">{selected.payer_name || "—"}</p></div>
                 <div><p className="text-xs text-muted-foreground">Téléphone</p><p className="font-mono">{selected.phone_number || "—"}</p></div>
-                <div><p className="text-xs text-muted-foreground">Opérateur</p><p>{selected.operator || "—"}</p></div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Opérateur</p>
+                  <p className="font-semibold">{getOperatorInfo(selected).label}</p>
+                  <p className="text-xs text-muted-foreground">Source: {getOperatorInfo(selected).source}</p>
+                </div>
                 <div><p className="text-xs text-muted-foreground">Créé le</p><p>{fmt(selected.created_date)}</p></div>
                 <div><p className="text-xs text-muted-foreground">Payé le</p><p>{fmt(selected.paid_at)}</p></div>
               </div>
+              {getOperatorInfo(selected).raw && (
+                <div className="p-3 bg-muted rounded-lg space-y-1">
+                  <p className="text-xs text-muted-foreground font-medium">Valeur brute opérateur</p>
+                  <p className="font-mono text-xs">{getOperatorInfo(selected).raw}</p>
+                </div>
+              )}
               {selected.geolocation && (
                 <div className="p-3 bg-muted rounded-lg space-y-1">
                   <p className="text-xs text-muted-foreground font-medium">Géolocalisation</p>

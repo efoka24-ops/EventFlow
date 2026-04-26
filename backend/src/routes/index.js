@@ -7,6 +7,10 @@ import eventFeedbackRoutes from "./eventFeedback.js";
 import userActionsRoutes from "./userActions.js";
 import siteSessionsRoutes from "./siteSessions.js";
 import paymentsRoutes from "./payments.js";
+import sponsorsRoutes from "./sponsors.js";
+import notificationsRoutes from "./notifications.js";
+import adminRoutes from "./admin.js";
+import publicSettingsRoutes from "./publicSettings.js";
 
 export const apiRouter = Router();
 
@@ -18,3 +22,7 @@ apiRouter.use("/event-feedback", eventFeedbackRoutes);
 apiRouter.use("/user-actions", userActionsRoutes);
 apiRouter.use("/site-sessions", siteSessionsRoutes);
 apiRouter.use("/payments", paymentsRoutes);
+apiRouter.use("/sponsors", sponsorsRoutes);
+apiRouter.use("/notifications", notificationsRoutes);
+apiRouter.use("/public-settings", publicSettingsRoutes);
+apiRouter.use("/admin", adminRoutes);

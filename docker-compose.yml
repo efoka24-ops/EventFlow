@@ -14,11 +14,31 @@ services:
     ports:
       - "3001:3001"
     environment:
-      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@eventflow-db:5432/${POSTGRES_DB}
-      - PORT=3001
-      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL:-postgres://${POSTGRES_USER:-eventflow}:${POSTGRES_PASSWORD:-eventflow_pass}@eventflow-db:5432/${POSTGRES_DB:-eventflow_db}}
+      - PORT=${PORT:-3001}
+      - NODE_ENV=${NODE_ENV:-production}
+      - DB_SSL=${DB_SSL:-false}
+      - DB_SSL_REJECT_UNAUTHORIZED=${DB_SSL_REJECT_UNAUTHORIZED:-true}
       - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN:-7d}
       - CORS_ORIGIN=${CORS_ORIGIN:-https://eventflow.trugroup.cm}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@eventflow.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-change_admin_password}
+      - ADMIN_FULL_NAME=${ADMIN_FULL_NAME:-Administrator}
+      - CAMPAY_BASE_URL=${CAMPAY_BASE_URL:-https://demo.campay.net/api}
+      - CAMPAY_USERNAME=${CAMPAY_USERNAME:-}
+      - CAMPAY_PASSWORD=${CAMPAY_PASSWORD:-}
+      - CAMPAY_PERMANENT_TOKEN=${CAMPAY_PERMANENT_TOKEN:-}
+      - ET_BASE_URL=${ET_BASE_URL:-https://api.easy-transact.net}
+      - ET_CLIENT_ID=${ET_CLIENT_ID:-}
+      - ET_CLIENT_SECRET=${ET_CLIENT_SECRET:-}
+      - ET_DEMO_MODE=${ET_DEMO_MODE:-false}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - SMTP_FROM_NAME=${SMTP_FROM_NAME:-NoReply EventFlow}
     restart: unless-stopped
     depends_on:
       - eventflow-db

@@ -5,10 +5,29 @@ import { pool } from "../db.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "../../..");
 
 const run = async () => {
-  // Use process.cwd() to get the root of the app (/app in Docker)
-  const schemaPath = path.resolve(process.cwd(), "database/schema.sql");
+  const candidatePaths = [
+    path.resolve(process.cwd(), "database/schema.sql"),
+    path.resolve(projectRoot, "database/schema.sql"),
+  ];
+  let schemaPath = null;
+
+  for (const candidate of candidatePaths) {
+    try {
+      await readFile(candidate, "utf8");
+      schemaPath = candidate;
+      break;
+    } catch {
+      // Try next candidate.
+    }
+  }
+
+  if (!schemaPath) {
+    throw new Error(`Unable to locate database/schema.sql. Tried: ${candidatePaths.join(", ")}`);
+  }
+
   console.log(`[init-db] Reading schema from: ${schemaPath}`);
   const sql = await readFile(schemaPath, "utf8");
   await pool.query(sql);

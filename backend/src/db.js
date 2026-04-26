@@ -14,6 +14,9 @@ const shouldUseSsl =
 
 export const pool = new Pool({
   connectionString,
+  connectionTimeoutMillis: 8000,
+  idleTimeoutMillis: 30000,
+  max: 12,
   ...(shouldUseSsl
     ? {
         ssl: {
@@ -23,4 +26,33 @@ export const pool = new Pool({
     : {}),
 });
 
-export const query = (text, params = []) => pool.query(text, params);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+export const isTransientDbError = (error) => {
+  const code = String(error?.code || "").toUpperCase();
+  const message = String(error?.message || "").toUpperCase();
+
+  return (
+    ["EAI_AGAIN", "ETIMEDOUT", "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "57P01"].includes(code) ||
+    message.includes("EAI_AGAIN") ||
+    message.includes("CONNECTION TERMINATED") ||
+    message.includes("CONNECT ETIMEDOUT")
+  );
+};
+
+export const query = async (text, params = []) => {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await pool.query(text, params);
+    } catch (error) {
+      if (!isTransientDbError(error) || attempt === maxAttempts) {
+        throw error;
+      }
+      await sleep(200 * attempt);
+    }
+  }
+
+  throw new Error("Unexpected query retry state");
+};

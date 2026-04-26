@@ -1,36 +1,38 @@
 import { Router } from "express";
 import { z } from "zod";
-import { query } from "../db.js";
+import { isTransientDbError, query } from "../db.js";
 import { requireAdmin } from "../middlewares/auth.js";
 import { parseLimit, parseSort } from "../utils/queryHelpers.js";
 
 const router = Router();
 const sessionIdSchema = z.string().uuid();
+const nullableString = z.string().nullable().optional();
+const nullableDatetime = z.string().datetime().nullable().optional();
 
 const heartbeatSchema = z.object({
-  started_at: z.string().datetime().optional(),
-  ended_at: z.string().datetime().nullable().optional(),
-  last_seen_at: z.string().datetime().optional(),
+  started_at: nullableDatetime,
+  ended_at: nullableDatetime,
+  last_seen_at: nullableDatetime,
   is_active: z.boolean().optional(),
-  page_path: z.string().optional(),
+  page_path: nullableString,
   user_email: z.string().email().nullable().optional(),
-  user_phone: z.string().nullable().optional(),
-  account_type: z.string().nullable().optional(),
-  user_agent: z.string().optional(),
-  browser: z.string().optional(),
-  browser_version: z.string().optional(),
-  browser_full: z.string().optional(),
-  os: z.string().optional(),
-  device_type: z.string().optional(),
-  language: z.string().optional(),
-  timezone: z.string().optional(),
-  screen: z.string().optional(),
-  referrer: z.string().optional(),
-  ip: z.string().optional(),
-  country: z.string().optional(),
-  city: z.string().optional(),
-  region: z.string().optional(),
-  geo_source: z.string().optional(),
+  user_phone: nullableString,
+  account_type: nullableString,
+  user_agent: nullableString,
+  browser: nullableString,
+  browser_version: nullableString,
+  browser_full: nullableString,
+  os: nullableString,
+  device_type: nullableString,
+  language: nullableString,
+  timezone: nullableString,
+  screen: nullableString,
+  referrer: nullableString,
+  ip: nullableString,
+  country: nullableString,
+  city: nullableString,
+  region: nullableString,
+  geo_source: nullableString,
   geo_latitude: z.number().nullable().optional(),
   geo_longitude: z.number().nullable().optional(),
   geo_accuracy_m: z.number().nullable().optional(),
@@ -38,7 +40,7 @@ const heartbeatSchema = z.object({
   geo_altitude_accuracy_m: z.number().nullable().optional(),
   geo_heading_deg: z.number().nullable().optional(),
   geo_speed_mps: z.number().nullable().optional(),
-  geo_timestamp: z.string().datetime().optional(),
+  geo_timestamp: nullableDatetime,
 });
 
 router.get("/", requireAdmin, async (req, res, next) => {
@@ -59,56 +61,63 @@ router.put("/:id/heartbeat", async (req, res, next) => {
     const payload = heartbeatSchema.parse(req.body || {});
     const now = new Date().toISOString();
 
-    const exists = await query("SELECT id, page_paths FROM site_sessions WHERE id = $1", [req.params.id]);
+    let exists = await query("SELECT id, page_paths FROM site_sessions WHERE id = $1", [req.params.id]);
 
     if (!exists.rowCount) {
       const initialPaths = payload.page_path ? [payload.page_path] : [];
-      const created = await query(
-        `INSERT INTO site_sessions (
-          id, started_at, ended_at, last_seen_at, is_active, page_paths,
-          user_email, user_phone, account_type, user_agent, browser, browser_version, browser_full,
-          os, device_type, language, timezone, screen, referrer, ip, country, city, region,
-          geo_source, geo_latitude, geo_longitude, geo_accuracy_m, geo_altitude_m,
-          geo_altitude_accuracy_m, geo_heading_deg, geo_speed_mps, geo_timestamp
-        ) VALUES (
-          $1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32
-        ) RETURNING *`,
-        [
-          req.params.id,
-          payload.started_at || now,
-          payload.ended_at || null,
-          payload.last_seen_at || now,
-          payload.is_active ?? true,
-          JSON.stringify(initialPaths),
-          payload.user_email || null,
-          payload.user_phone || null,
-          payload.account_type || null,
-          payload.user_agent || null,
-          payload.browser || null,
-          payload.browser_version || null,
-          payload.browser_full || null,
-          payload.os || null,
-          payload.device_type || null,
-          payload.language || null,
-          payload.timezone || null,
-          payload.screen || null,
-          payload.referrer || null,
-          payload.ip || null,
-          payload.country || null,
-          payload.city || null,
-          payload.region || null,
-          payload.geo_source || null,
-          payload.geo_latitude ?? null,
-          payload.geo_longitude ?? null,
-          payload.geo_accuracy_m ?? null,
-          payload.geo_altitude_m ?? null,
-          payload.geo_altitude_accuracy_m ?? null,
-          payload.geo_heading_deg ?? null,
-          payload.geo_speed_mps ?? null,
-          payload.geo_timestamp || null,
-        ]
-      );
-      return res.json(created.rows[0]);
+      try {
+        const created = await query(
+          `INSERT INTO site_sessions (
+            id, started_at, ended_at, last_seen_at, is_active, page_paths,
+            user_email, user_phone, account_type, user_agent, browser, browser_version, browser_full,
+            os, device_type, language, timezone, screen, referrer, ip, country, city, region,
+            geo_source, geo_latitude, geo_longitude, geo_accuracy_m, geo_altitude_m,
+            geo_altitude_accuracy_m, geo_heading_deg, geo_speed_mps, geo_timestamp
+          ) VALUES (
+            $1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32
+          ) RETURNING *`,
+          [
+            req.params.id,
+            payload.started_at || now,
+            payload.ended_at || null,
+            payload.last_seen_at || now,
+            payload.is_active ?? true,
+            JSON.stringify(initialPaths),
+            payload.user_email || null,
+            payload.user_phone || null,
+            payload.account_type || null,
+            payload.user_agent || null,
+            payload.browser || null,
+            payload.browser_version || null,
+            payload.browser_full || null,
+            payload.os || null,
+            payload.device_type || null,
+            payload.language || null,
+            payload.timezone || null,
+            payload.screen || null,
+            payload.referrer || null,
+            payload.ip || null,
+            payload.country || null,
+            payload.city || null,
+            payload.region || null,
+            payload.geo_source || null,
+            payload.geo_latitude ?? null,
+            payload.geo_longitude ?? null,
+            payload.geo_accuracy_m ?? null,
+            payload.geo_altitude_m ?? null,
+            payload.geo_altitude_accuracy_m ?? null,
+            payload.geo_heading_deg ?? null,
+            payload.geo_speed_mps ?? null,
+            payload.geo_timestamp || null,
+          ]
+        );
+        return res.json(created.rows[0]);
+      } catch (err) {
+        if (err?.code !== "23505") {
+          throw err;
+        }
+        exists = await query("SELECT id, page_paths FROM site_sessions WHERE id = $1", [req.params.id]);
+      }
     }
 
     const currentPaths = Array.isArray(exists.rows[0].page_paths) ? exists.rows[0].page_paths : [];
@@ -190,6 +199,9 @@ router.put("/:id/heartbeat", async (req, res, next) => {
 
     return res.json(updated.rows[0]);
   } catch (err) {
+    if (isTransientDbError(err)) {
+      return res.status(202).json({ ok: false, queued: false, reason: "analytics_db_temporarily_unavailable" });
+    }
     next(err);
   }
 });
