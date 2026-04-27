@@ -2,12 +2,57 @@ import { Router } from "express";
 import { z } from "zod";
 import { query } from "../db.js";
 import { config } from "../config.js";
-import { comparePassword, hashPassword, signToken } from "../utils/auth.js";
+import {
+  comparePassword,
+  hashPassword,
+  signToken,
+  verifyToken,
+  generateRefreshToken,
+  hashRefreshToken,
+} from "../utils/auth.js";
 import { requireAuth, requireAdmin } from "../middlewares/auth.js";
 import { httpError } from "../utils/httpError.js";
 import { verifySmtpConnection } from "../services/emailService.js";
 
 const router = Router();
+
+// ─── Cookie config ───────────────────────────────────────────────────────────
+
+const REFRESH_COOKIE = "rf_token";
+const REFRESH_EXPIRY_MS = config.refreshTokenExpiryDays * 24 * 60 * 60 * 1000;
+
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: config.nodeEnv === "production",
+  sameSite: config.nodeEnv === "production" ? "strict" : "lax",
+  maxAge: REFRESH_EXPIRY_MS,
+  path: "/api/auth",
+};
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const issueRefreshToken = async (userId, userType, deviceInfo) => {
+  const raw = generateRefreshToken();
+  const tokenHash = hashRefreshToken(raw);
+  const expiresAt = new Date(Date.now() + REFRESH_EXPIRY_MS);
+
+  await query(
+    `INSERT INTO refresh_tokens (token_hash, user_id, user_type, expires_at, device_info)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [tokenHash, String(userId), userType, expiresAt, deviceInfo || null]
+  );
+
+  return raw;
+};
+
+const revokeRefreshToken = async (tokenHash) => {
+  await query(
+    `UPDATE refresh_tokens SET is_revoked = true WHERE token_hash = $1`,
+    [tokenHash]
+  );
+};
+
+// ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const creatorSignupSchema = z.object({
   full_name: z.string().min(1),
@@ -39,6 +84,8 @@ const adminLoginSchema = z.object({
   password: z.string().min(1),
 });
 
+// ─── Creator signup ───────────────────────────────────────────────────────────
+
 router.post("/creator/signup", async (req, res, next) => {
   try {
     const payload = creatorSignupSchema.parse(req.body);
@@ -49,35 +96,20 @@ router.post("/creator/signup", async (req, res, next) => {
       `SELECT id FROM creator_accounts WHERE (LOWER(email) = LOWER($1) AND $1 <> '') OR (phone = $2 AND $2 <> '') LIMIT 1`,
       [email, phone]
     );
-
     if (exists.rowCount) return next(httpError(409, "Creator account already exists"));
 
     const hashed = await hashPassword(payload.password);
     const created = await query(
       `INSERT INTO creator_accounts (
-         full_name,
-         email,
-         phone,
-         password_hash,
-         password,
-         geo_latitude,
-         geo_longitude,
-         geo_accuracy,
-         geo_source,
-         geo_captured_at
+         full_name, email, phone, password_hash, password,
+         geo_latitude, geo_longitude, geo_accuracy, geo_source, geo_captured_at
        )
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id, full_name, email, phone, created_date`,
       [
-        payload.full_name.trim(),
-        email,
-        phone,
-        hashed,
-        payload.password,
-        payload.geo_latitude ?? null,
-        payload.geo_longitude ?? null,
-        payload.geo_accuracy ?? null,
-        payload.geo_source || null,
+        payload.full_name.trim(), email, phone, hashed, payload.password,
+        payload.geo_latitude ?? null, payload.geo_longitude ?? null,
+        payload.geo_accuracy ?? null, payload.geo_source || null,
         payload.geo_captured_at || null,
       ]
     );
@@ -85,11 +117,19 @@ router.post("/creator/signup", async (req, res, next) => {
     const user = created.rows[0];
     const token = signToken({ sub: user.id, role: "creator", email: user.email || null, phone: user.phone || null });
 
+    let refreshRaw = null;
+    try {
+      refreshRaw = await issueRefreshToken(user.id, "creator", req.headers["user-agent"]);
+      res.cookie(REFRESH_COOKIE, refreshRaw, refreshCookieOptions);
+    } catch {}
+
     res.status(201).json({ token, user });
   } catch (err) {
     next(err);
   }
 });
+
+// ─── Creator login ────────────────────────────────────────────────────────────
 
 router.post("/creator/login", async (req, res, next) => {
   try {
@@ -103,36 +143,35 @@ router.post("/creator/login", async (req, res, next) => {
        LIMIT 1`,
       [identifier, payload.identifier.trim()]
     );
-
     if (!result.rowCount) return next(httpError(401, "Invalid credentials"));
 
     const account = result.rows[0];
     const isValid = account.password_hash
       ? await comparePassword(payload.password, account.password_hash)
       : payload.password === account.password;
-
     if (!isValid) return next(httpError(401, "Invalid credentials"));
 
-    const user = {
-      id: account.id,
-      full_name: account.full_name,
-      email: account.email,
-      phone: account.phone,
-    };
-
+    const user = { id: account.id, full_name: account.full_name, email: account.email, phone: account.phone };
     const token = signToken({ sub: user.id, role: "creator", email: user.email || null, phone: user.phone || null });
+
+    try {
+      const refreshRaw = await issueRefreshToken(user.id, "creator", req.headers["user-agent"]);
+      res.cookie(REFRESH_COOKIE, refreshRaw, refreshCookieOptions);
+    } catch {}
+
     res.json({ token, user });
   } catch (err) {
     next(err);
   }
 });
 
+// ─── Admin login ──────────────────────────────────────────────────────────────
+
 router.post("/admin/login", async (req, res, next) => {
   try {
     const payload = adminLoginSchema.parse(req.body);
     const email = payload.email.trim().toLowerCase();
 
-    // Preferred path: authenticate against PostgreSQL admin_accounts.
     try {
       const dbAdmin = await query(
         `SELECT id, full_name, email, password_hash,
@@ -154,24 +193,27 @@ router.post("/admin/login", async (req, res, next) => {
 
         const role = account.role || "admin";
         const token = signToken({ sub: account.id, role, email: account.email });
+
+        try {
+          const refreshRaw = await issueRefreshToken(account.id, "admin", req.headers["user-agent"]);
+          res.cookie(REFRESH_COOKIE, refreshRaw, refreshCookieOptions);
+        } catch {}
+
         return res.json({
           token,
           user: { id: account.id, role, email: account.email, full_name: account.full_name },
         });
       }
     } catch (dbErr) {
-      // Keep compatibility before migrations are applied.
       if (dbErr?.code !== "42P01") throw dbErr;
     }
 
-    // Compatibility fallback: env-based admin credentials.
+    // Env-based fallback
     if (!config.adminEmail || !config.adminPassword) {
       return next(httpError(500, "Admin credentials are not configured"));
     }
-
     const emailOk = email === config.adminEmail.trim().toLowerCase();
     const pwdOk = payload.password === config.adminPassword;
-
     if (!emailOk || !pwdOk) return next(httpError(401, "Invalid admin credentials"));
 
     const token = signToken({ sub: "admin", role: "admin", email: config.adminEmail });
@@ -180,6 +222,110 @@ router.post("/admin/login", async (req, res, next) => {
     next(err);
   }
 });
+
+// ─── Refresh token endpoint ───────────────────────────────────────────────────
+
+router.post("/refresh", async (req, res, next) => {
+  try {
+    const raw = req.cookies?.[REFRESH_COOKIE];
+    if (!raw) return next(httpError(401, "No refresh token"));
+
+    const tokenHash = hashRefreshToken(raw);
+    let stored;
+
+    try {
+      const result = await query(
+        `SELECT id, user_id, user_type, expires_at, is_revoked
+         FROM refresh_tokens
+         WHERE token_hash = $1
+         LIMIT 1`,
+        [tokenHash]
+      );
+      stored = result.rows[0];
+    } catch (dbErr) {
+      if (dbErr?.code === "42P01") return next(httpError(401, "Session expired"));
+      throw dbErr;
+    }
+
+    if (!stored || stored.is_revoked) {
+      res.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
+      return next(httpError(401, "Invalid or revoked refresh token"));
+    }
+
+    if (new Date(stored.expires_at) < new Date()) {
+      res.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
+      return next(httpError(401, "Refresh token expired — please log in again"));
+    }
+
+    // Token rotation: revoke old, issue new
+    await revokeRefreshToken(tokenHash);
+    const newRaw = generateRefreshToken();
+    const newHash = hashRefreshToken(newRaw);
+    const newExpiry = new Date(Date.now() + REFRESH_EXPIRY_MS);
+
+    await query(
+      `INSERT INTO refresh_tokens (token_hash, user_id, user_type, expires_at, device_info)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [newHash, stored.user_id, stored.user_type, newExpiry, req.headers["user-agent"] || null]
+    );
+
+    // Update last_used
+    await query(`UPDATE refresh_tokens SET last_used_at = NOW() WHERE token_hash = $1`, [newHash]);
+
+    res.cookie(REFRESH_COOKIE, newRaw, refreshCookieOptions);
+
+    // Build new access token based on user type
+    let accessToken;
+    if (stored.user_type === "admin") {
+      try {
+        const admin = await query(
+          `SELECT id, email, role, is_suspended, is_active FROM admin_accounts WHERE id = $1 LIMIT 1`,
+          [stored.user_id]
+        );
+        if (!admin.rowCount || !admin.rows[0].is_active || admin.rows[0].is_suspended) {
+          res.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
+          return next(httpError(401, "Account disabled"));
+        }
+        const a = admin.rows[0];
+        accessToken = signToken({ sub: a.id, role: a.role, email: a.email });
+      } catch (dbErr) {
+        if (dbErr?.code === "42P01") {
+          accessToken = signToken({ sub: stored.user_id, role: "admin", email: "" });
+        } else throw dbErr;
+      }
+    } else {
+      const creator = await query(
+        `SELECT id, email, phone FROM creator_accounts WHERE id = $1 LIMIT 1`,
+        [stored.user_id]
+      );
+      if (!creator.rowCount) {
+        res.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
+        return next(httpError(401, "Account not found"));
+      }
+      const c = creator.rows[0];
+      accessToken = signToken({ sub: c.id, role: "creator", email: c.email || null, phone: c.phone || null });
+    }
+
+    res.json({ token: accessToken, user_type: stored.user_type });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ─── Logout ───────────────────────────────────────────────────────────────────
+
+router.post("/logout", async (req, res) => {
+  const raw = req.cookies?.[REFRESH_COOKIE];
+  if (raw) {
+    try {
+      await revokeRefreshToken(hashRefreshToken(raw));
+    } catch {}
+  }
+  res.clearCookie(REFRESH_COOKIE, { path: "/api/auth" });
+  res.json({ ok: true });
+});
+
+// ─── /me ─────────────────────────────────────────────────────────────────────
 
 const ADMIN_ROLES = new Set(["super_admin", "admin", "support", "finance", "marketing", "moderator"]);
 
@@ -198,7 +344,6 @@ router.get("/me", requireAuth, async (req, res, next) => {
       } catch (dbErr) {
         if (dbErr?.code !== "42P01") throw dbErr;
       }
-      // fallback for env-based admin or pre-migration
       return res.json({ id: req.user.sub || "admin", role: req.user.role, email: req.user.email || config.adminEmail });
     }
 
@@ -206,13 +351,14 @@ router.get("/me", requireAuth, async (req, res, next) => {
       "SELECT id, full_name, email, phone, created_date FROM creator_accounts WHERE id = $1 LIMIT 1",
       [req.user.sub]
     );
-
     if (!result.rowCount) return next(httpError(404, "User not found"));
     return res.json({ ...result.rows[0], role: "creator" });
   } catch (err) {
     next(err);
   }
 });
+
+// ─── SMTP health ──────────────────────────────────────────────────────────────
 
 router.get("/smtp-health", requireAdmin, async (_req, res, next) => {
   try {
@@ -222,6 +368,8 @@ router.get("/smtp-health", requireAdmin, async (_req, res, next) => {
     next(err);
   }
 });
+
+// ─── Creator profile update ───────────────────────────────────────────────────
 
 router.patch("/creator/me", requireAuth, async (req, res, next) => {
   try {
@@ -241,10 +389,7 @@ router.patch("/creator/me", requireAuth, async (req, res, next) => {
     const values = [];
     let i = 1;
 
-    if (payload.full_name !== undefined) {
-      updates.push(`full_name = $${i++}`);
-      values.push(payload.full_name.trim());
-    }
+    if (payload.full_name !== undefined) { updates.push(`full_name = $${i++}`); values.push(payload.full_name.trim()); }
 
     let nextEmail = account.email;
     if (payload.email !== undefined) {
@@ -299,6 +444,8 @@ router.patch("/creator/me", requireAuth, async (req, res, next) => {
     next(err);
   }
 });
+
+// ─── Creator accounts list (admin) ────────────────────────────────────────────
 
 router.get("/creator-accounts", requireAdmin, async (req, res, next) => {
   try {

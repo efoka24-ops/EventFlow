@@ -6,7 +6,10 @@ export const adminLogin = async ({ email, password }) => {
   return data;
 };
 
-export const adminLogout = () => {
+export const adminLogout = async () => {
+  try {
+    await apiPost("/auth/logout", {}, { token: tokenStore.getAdminToken() });
+  } catch {}
   tokenStore.clearAdminToken();
 };
 
@@ -24,7 +27,10 @@ export const creatorSignup = async (payload) => {
   return data;
 };
 
-export const creatorLogout = () => {
+export const creatorLogout = async () => {
+  try {
+    await apiPost("/auth/logout", {}, { token: tokenStore.getCreatorToken() });
+  } catch {}
   tokenStore.clearCreatorToken();
   window.dispatchEvent(new Event("creator-session-changed"));
 };
@@ -33,10 +39,8 @@ export const getAdminUser = () => {
   const token = tokenStore.getAdminToken();
   if (!token) return null;
   const payload = decodeJwtPayload(token);
-  if (!payload || payload.exp * 1000 < Date.now()) {
-    tokenStore.clearAdminToken();
-    return null;
-  }
+  if (!payload) { tokenStore.clearAdminToken(); return null; }
+  // Allow expired tokens here — the interceptor will refresh on next API call
   const ADMIN_ROLES = ["super_admin", "admin", "support", "finance", "marketing", "moderator"];
   const role = ADMIN_ROLES.includes(payload.role) ? payload.role : "admin";
   return { ...payload, role, isAdmin: true };
@@ -46,10 +50,7 @@ export const getCreatorUser = () => {
   const token = tokenStore.getCreatorToken();
   if (!token) return null;
   const payload = decodeJwtPayload(token);
-  if (!payload || payload.exp * 1000 < Date.now()) {
-    tokenStore.clearCreatorToken();
-    return null;
-  }
+  if (!payload) { tokenStore.clearCreatorToken(); return null; }
   return { ...payload, role: "creator" };
 };
 

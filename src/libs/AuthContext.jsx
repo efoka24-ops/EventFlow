@@ -1,5 +1,5 @@
 import { createContext, useState, useContext, useEffect, useCallback } from "react";
-import { adminLogin as apiAdminLogin, adminLogout as apiAdminLogout, getAdminUser } from "@/api/authApi";
+import { adminLogin as apiAdminLogin, adminLogout as apiAdminLogout, getAdminUser, creatorLogout as apiCreatorLogout } from "@/api/authApi";
 import { tokenStore } from "@/api/apiClient";
 
 const AuthContext = createContext();
@@ -25,6 +25,17 @@ export const AuthProvider = ({ children }) => {
     loadFromToken();
   }, [loadFromToken]);
 
+  // Listen for session-expired events fired by the API interceptor
+  useEffect(() => {
+    const handleExpired = () => {
+      setUser(null);
+      setIsAuthenticated(false);
+      window.location.assign("/admin/login?expired=1");
+    };
+    window.addEventListener("session-expired", handleExpired);
+    return () => window.removeEventListener("session-expired", handleExpired);
+  }, []);
+
   const loginAsAdmin = async (email, password) => {
     try {
       const { user: adminUser } = await apiAdminLogin({ email, password });
@@ -38,9 +49,8 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    apiAdminLogout();
-    tokenStore.clearCreatorToken();
+  const logout = async () => {
+    await Promise.allSettled([apiAdminLogout(), apiCreatorLogout()]);
     setUser(null);
     setIsAuthenticated(false);
   };

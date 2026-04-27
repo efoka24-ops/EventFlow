@@ -16,7 +16,9 @@ export const config = {
   dbSsl: process.env.DB_SSL === "true" ? true : process.env.DB_SSL === "false" ? false : undefined,
   dbSslRejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED !== "false",
   jwtSecret: process.env.JWT_SECRET || "dev_fallback_secret_change_in_production",
-  jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
+  // Access token: short-lived (1h). Refresh token handles long sessions.
+  jwtExpiresIn: process.env.JWT_EXPIRES_IN || "1h",
+  refreshTokenExpiryDays: parseInt(process.env.REFRESH_TOKEN_EXPIRES_DAYS || "30", 10),
   corsOrigin: process.env.CORS_ORIGIN || "http://localhost:5173",
   adminEmail: process.env.ADMIN_EMAIL || "",
   adminPassword: process.env.ADMIN_PASSWORD || "",
