@@ -27,6 +27,7 @@ const writableFields = [
   "organizer_name",
   "organizer_email",
   "organizer_phone",
+  "registration_config",
 ];
 
 const createEventSchema = z.object({
@@ -58,6 +59,7 @@ const LIST_COLUMNS = `
   image_url, price, max_participants, tags,
   organizer_name, organizer_email, organizer_phone,
   submitted_by_user, is_featured, created_date, updated_date,
+  registration_config,
   LEFT(description, 220) AS description
 `;
 
@@ -185,14 +187,24 @@ const requireEventOwnership = async (req, res, next) => {
 // Fields creators are NOT allowed to change (e.g. approval_status, is_featured)
 const CREATOR_LOCKED_FIELDS = new Set(["approval_status", "is_featured", "submitted_by_user"]);
 
-router.put("/:id", requireAuth, requireEventOwnership, async (req, res, next) => {
-  try {
-    const isAdmin = ["super_admin", "admin", "moderator"].includes(req.user?.role);
-    const updates = Object.entries(req.body || {}).filter(([key, value]) => {
+// Timestamp columns that must not receive empty strings (convert "" → null)
+const DATE_FIELDS = new Set(["date_start", "date_end"]);
+const sanitizeValue = (key, value) =>
+  DATE_FIELDS.has(key) && value === "" ? null : value;
+
+const buildUpdates = (body, isAdmin) =>
+  Object.entries(body || {})
+    .filter(([key, value]) => {
       if (!writableFields.includes(key) || value === undefined) return false;
       if (!isAdmin && CREATOR_LOCKED_FIELDS.has(key)) return false;
       return true;
-    });
+    })
+    .map(([key, value]) => [key, sanitizeValue(key, value)]);
+
+router.put("/:id", requireAuth, requireEventOwnership, async (req, res, next) => {
+  try {
+    const isAdmin = ["super_admin", "admin", "moderator"].includes(req.user?.role);
+    const updates = buildUpdates(req.body, isAdmin);
 
     if (!updates.length) return next(httpError(400, "No valid fields to update"));
 
@@ -214,11 +226,7 @@ router.put("/:id", requireAuth, requireEventOwnership, async (req, res, next) =>
 router.patch("/:id", requireAuth, requireEventOwnership, async (req, res, next) => {
   try {
     const isAdmin = ["super_admin", "admin", "moderator"].includes(req.user?.role);
-    const updates = Object.entries(req.body || {}).filter(([key, value]) => {
-      if (!writableFields.includes(key) || value === undefined) return false;
-      if (!isAdmin && CREATOR_LOCKED_FIELDS.has(key)) return false;
-      return true;
-    });
+    const updates = buildUpdates(req.body, isAdmin);
 
     if (!updates.length) return next(httpError(400, "No valid fields to update"));
 

@@ -97,11 +97,14 @@ export default function Footer() {
             <p>© {new Date().getFullYear()} EventFlow. Tous droits réservés.</p>
             <span className="hidden sm:inline">·</span>
             <p className="hidden sm:flex items-center gap-1.5">
-              <MapPin className="w-3 h-3" /> Cameroun, Afrique
+              <MapPin className="w-3 h-3" /> Garoua, Cameroun
             </p>
           </div>
           <p className="flex items-center gap-1.5">
-            <Mail className="w-3 h-3" /> contact@eventflow.cm
+            <Mail className="w-3 h-3" /> eventlfow@trugroup.cm
+          </p>
+          <p className="flex items-center gap-1.5">
+            <span className="w-3 h-3">📞</span> 678758976
           </p>
         </div>
       </div>

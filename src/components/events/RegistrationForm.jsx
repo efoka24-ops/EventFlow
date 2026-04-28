@@ -624,48 +624,62 @@ export default function RegistrationForm({ event, onSuccess }) {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Prénom *</Label>
-                <Input required value={formData.first_name} onChange={(e) => handleChange("first_name", e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Nom *</Label>
-                <Input required value={formData.last_name} onChange={(e) => handleChange("last_name", e.target.value)} />
-              </div>
-            </div>
-            {!currentUser && (
-              <div className="space-y-1.5">
-                <Label>Email <span className="text-muted-foreground text-xs">(pour recevoir votre billet)</span></Label>
-                <Input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleChange("email", e.target.value)}
-                  placeholder="votre@email.com"
-                />
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-3">
-              {(!currentUser || !currentUser.phone) && (
-                <div className="space-y-1.5">
-                  <Label>Téléphone</Label>
-                  <Input type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} placeholder="+237 6XX XX XX XX" />
+          {(() => {
+            const cfg = event?.registration_config || {};
+            const hideEmail  = !!cfg.hide_email;
+            const hidePhone  = !!cfg.hide_phone;
+            const hideGender = !!cfg.hide_gender;
+            const showPhone  = !hidePhone && (!currentUser || !currentUser.phone);
+            const showGender = !hideGender;
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>Prénom *</Label>
+                    <Input required value={formData.first_name} onChange={(e) => handleChange("first_name", e.target.value)} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Nom *</Label>
+                    <Input required value={formData.last_name} onChange={(e) => handleChange("last_name", e.target.value)} />
+                  </div>
                 </div>
-              )}
-              <div className={`space-y-1.5 ${(!currentUser || !currentUser.phone) ? "" : "col-span-2"}`}>
-                <Label>Genre</Label>
-                <Select value={formData.gender} onValueChange={(v) => handleChange("gender", v)}>
-                  <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="homme">Homme</SelectItem>
-                    <SelectItem value="femme">Femme</SelectItem>
-                    <SelectItem value="autre">Autre</SelectItem>
-                  </SelectContent>
-                </Select>
+                {!hideEmail && !currentUser && (
+                  <div className="space-y-1.5">
+                    <Label>Email <span className="text-muted-foreground text-xs">(pour recevoir votre billet)</span></Label>
+                    <Input
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleChange("email", e.target.value)}
+                      placeholder="votre@email.com"
+                    />
+                  </div>
+                )}
+                {(showPhone || showGender) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {showPhone && (
+                      <div className="space-y-1.5">
+                        <Label>Téléphone</Label>
+                        <Input type="tel" value={formData.phone} onChange={(e) => handleChange("phone", e.target.value)} placeholder="+237 6XX XX XX XX" />
+                      </div>
+                    )}
+                    {showGender && (
+                      <div className={`space-y-1.5 ${showPhone ? "" : "col-span-2"}`}>
+                        <Label>Genre</Label>
+                        <Select value={formData.gender} onValueChange={(v) => handleChange("gender", v)}>
+                          <SelectTrigger><SelectValue placeholder="Sélectionner" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="homme">Homme</SelectItem>
+                            <SelectItem value="femme">Femme</SelectItem>
+                            <SelectItem value="autre">Autre</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Champs personnalisés configurés par l'admin pour cet événement */}
           {customFields.length > 0 && (

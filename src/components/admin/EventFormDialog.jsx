@@ -121,6 +121,7 @@ export default function EventFormDialog({ open, onClose, event }) {
       ...form,
       max_participants: form.max_participants ? Number(form.max_participants) : undefined,
       price: form.price ? Number(form.price) : 0,
+      date_end: form.date_end || undefined,
     };
 
     try {

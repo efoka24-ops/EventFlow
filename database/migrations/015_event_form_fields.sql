@@ -21,10 +21,6 @@ CREATE TABLE event_form_fields (
 
 CREATE INDEX idx_event_form_fields_event_id ON event_form_fields (event_id);
 
-CREATE TRIGGER event_form_fields_updated_at
-  BEFORE UPDATE ON event_form_fields
-  FOR EACH ROW EXECUTE FUNCTION set_updated_date();
-
 -- Stockage des valeurs personnalisées dans registrations
 ALTER TABLE registrations
   ADD COLUMN IF NOT EXISTS extra_data JSONB NOT NULL DEFAULT '{}';

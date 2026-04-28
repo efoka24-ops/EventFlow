@@ -54,19 +54,19 @@ export default function FooterSaaS() {
             <ul className="space-y-4">
               <li className="flex items-center gap-2">
                 <Mail className="w-4 h-4 text-blue-400" />
-                <a href="mailto:hello@eventflow.com" className="hover:text-white transition">
-                  hello@eventflow.com
+                <a href="mailto:eventflow@trugroup.cm" className="hover:text-white transition">
+                  eventflow@trugroup.cm
                 </a>
               </li>
               <li className="flex items-center gap-2">
                 <Phone className="w-4 h-4 text-blue-400" />
-                <a href="tel:+237670000000" className="hover:text-white transition">
-                  +237 670 000 000
+                <a href="tel:+237678758976" className="hover:text-white transition">
+                  +237 678 758 976
                 </a>
               </li>
               <li className="flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-blue-400" />
-                <span>Yaoundé, Cameroun</span>
+                <span>Garoua, Cameroun</span>
               </li>
             </ul>
           </div>

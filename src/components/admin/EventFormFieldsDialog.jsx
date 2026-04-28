@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { listFormFields, createFormField, updateFormField, deleteFormField } from "@/api/formFieldsApi";
+import { updateEvent } from "@/api/eventsApi";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -194,16 +195,45 @@ function FieldForm({ event, initial, onSave, onCancel, isSaving }) {
   );
 }
 
+// Champs de base non supprimables — toujours présents, masquables sauf prénom/nom
+const BASE_FIELDS = [
+  { key: "email",  label: "Email",      configKey: "hide_email",  alwaysVisible: false },
+  { key: "phone",  label: "Téléphone",  configKey: "hide_phone",  alwaysVisible: false },
+  { key: "gender", label: "Genre",      configKey: "hide_gender", alwaysVisible: false },
+];
+
 export default function EventFormFieldsDialog({ open, onClose, event }) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState(null); // null | "new" | fieldObject
   const queryKey = ["form-fields", event?.id];
+
+  // Config locale pour les toggles de champs de base — se resynchronise à l'ouverture
+  const [regConfig, setRegConfig] = useState(() => event?.registration_config || {});
+  useEffect(() => {
+    if (open) setRegConfig(event?.registration_config || {});
+  }, [open, event?.id]);
 
   const { data: fields = [], isLoading } = useQuery({
     queryKey,
     queryFn: () => listFormFields(event.id, true),
     enabled: open && !!event?.id,
   });
+
+  const configMut = useMutation({
+    mutationFn: (config) => updateEvent(event.id, { registration_config: config }),
+    onSuccess: () => {
+      toast.success("Configuration enregistrée");
+      qc.invalidateQueries({ queryKey: ["admin-events"] });
+      qc.invalidateQueries({ queryKey: ["events"] });
+    },
+    onError: () => toast.error("Erreur lors de la sauvegarde"),
+  });
+
+  const toggleBaseField = (configKey) => {
+    const next = { ...regConfig, [configKey]: !regConfig[configKey] };
+    setRegConfig(next);
+    configMut.mutate(next);
+  };
 
   const createMut = useMutation({
     mutationFn: createFormField,
@@ -271,7 +301,55 @@ export default function EventFormFieldsDialog({ open, onClose, event }) {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-5">
+
+          {/* ── Champs de base (toujours présents, masquables) ── */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Champs de base
+            </p>
+            <div className="rounded-lg border border-border divide-y divide-border">
+              {/* Prénom & Nom — toujours obligatoires */}
+              {[{ label: "Prénom" }, { label: "Nom" }].map((f) => (
+                <div key={f.label} className="flex items-center justify-between px-3 py-2.5">
+                  <div>
+                    <span className="text-sm font-medium">{f.label}</span>
+                    <Badge variant="outline" className="ml-2 text-[10px] h-4 px-1 text-red-600 border-red-200">
+                      toujours visible
+                    </Badge>
+                  </div>
+                  <Switch checked disabled className="opacity-50" />
+                </div>
+              ))}
+              {/* Email, Téléphone, Genre — masquables */}
+              {BASE_FIELDS.map((f) => {
+                const isHidden = !!regConfig[f.configKey];
+                return (
+                  <div key={f.key} className="flex items-center justify-between px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium">{f.label}</span>
+                      {isHidden && (
+                        <Badge variant="outline" className="text-[10px] h-4 px-1 text-muted-foreground">
+                          masqué
+                        </Badge>
+                      )}
+                    </div>
+                    <Switch
+                      checked={!isHidden}
+                      onCheckedChange={() => toggleBaseField(f.configKey)}
+                      disabled={configMut.isPending}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Champs personnalisés ── */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Champs personnalisés
+            </p>
           {/* Field list */}
           {isLoading ? (
             <div className="flex justify-center py-8">
@@ -398,7 +476,8 @@ export default function EventFormFieldsDialog({ open, onClose, event }) {
               Ajouter un champ
             </Button>
           )}
-        </div>
+          </div>{/* fin section champs personnalisés */}
+        </div>{/* fin space-y-5 */}
       </DialogContent>
     </Dialog>
   );

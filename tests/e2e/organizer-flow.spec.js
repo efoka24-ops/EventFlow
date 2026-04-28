@@ -199,10 +199,11 @@ test("T4 — Modification d'un événement existant", async ({ page }) => {
   await page.goto("/dashboard/events");
 
   // Attendre que l'événement de T3 soit visible
-  await expect(page.getByText(createdEventTitle)).toBeVisible({ timeout: 12_000 });
+  const eventRow = page.locator("div, li, tr").filter({ hasText: createdEventTitle }).first();
+  await expect(eventRow).toBeVisible({ timeout: 12_000 });
 
-  // Bouton Modifier (attribut title="Modifier" sur l'icône crayon)
-  await page.locator('[title="Modifier"]').first().click();
+  // Cliquer le bouton Modifier le plus proche de la ligne de l'événement
+  await eventRow.locator('[title="Modifier"]').click();
 
   // Dialog en mode édition
   const dialog = page.getByRole("dialog");
@@ -215,17 +216,13 @@ test("T4 — Modification d'un événement existant", async ({ page }) => {
   await titleInput.clear();
   await titleInput.fill(updatedTitle);
 
-  const submitBtn = dialog.getByRole("button", { name: /Mettre à jour/i });
-  await submitBtn.scrollIntoViewIfNeeded();
-  await submitBtn.click();
+  // Cliquer le bouton de soumission (identique à ce que fait l'utilisateur)
+  await dialog.getByRole("button", { name: /Mettre à jour/i }).click();
 
-  // Toast de confirmation (le PATCH a réussi)
-  await expect(page.getByText("Événement mis à jour !")).toBeVisible({ timeout: 12_000 });
+  // Le dialog se ferme uniquement sur succès (onClose appelé après toast.success)
+  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
 
-  // Dialog fermé
-  await expect(dialog).toHaveCount(0, { timeout: 5_000 });
-
-  // Nouveau titre visible dans la liste
+  // Nouveau titre visible dans la liste (preuve que React Query a invalidé)
   await expect(page.getByText(updatedTitle)).toBeVisible({ timeout: 12_000 });
 
   createdEventTitle = updatedTitle;
