@@ -1,4 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback } from "react";
+import Cropper from "react-easy-crop";
+import getCroppedImg from "@/utils/cropImage";
 import { createEvent, updateEvent } from "@/api/eventsApi";
 import { uploadImage } from "@/api/uploadApi";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -19,6 +21,15 @@ export default function EventFormDialog({ open, onClose, event }) {
   const [imagePreview, setImagePreview] = useState(event?.image_url || null);
   const [imageUploading, setImageUploading] = useState(false);
   const fileInputRef = useRef(null);
+  // Pour crop
+  const [showCropper, setShowCropper] = useState(false);
+  const [rawImage, setRawImage] = useState(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
+  const [zoom, setZoom] = useState(1);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
+  const onCropComplete = useCallback((_, croppedAreaPixels) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
   const [form, setForm] = useState(event ? {
     ...event,
     title: event.title || "",
@@ -57,14 +68,23 @@ export default function EventFormDialog({ open, onClose, event }) {
   const handleImageSelect = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    // Show local preview immediately
     const localUrl = URL.createObjectURL(file);
-    setImagePreview(localUrl);
-    // Upload to server
+    setRawImage(localUrl);
+    setShowCropper(true);
+  };
+
+  const handleCropConfirm = async () => {
     setImageUploading(true);
-    const fileUrl = await uploadImage(file);
-    setForm((prev) => ({ ...prev, image_url: fileUrl }));
-    setImagePreview(fileUrl);
+    try {
+      const croppedBlob = await getCroppedImg(rawImage, croppedAreaPixels);
+      const croppedFile = new File([croppedBlob], "cropped.jpg", { type: "image/jpeg" });
+      const fileUrl = await uploadImage(croppedFile);
+      setForm((prev) => ({ ...prev, image_url: fileUrl }));
+      setImagePreview(fileUrl);
+      setShowCropper(false);
+    } catch (err) {
+      toast.error("Erreur lors du recadrage de l'image.");
+    }
     setImageUploading(false);
   };
 
@@ -76,6 +96,23 @@ export default function EventFormDialog({ open, onClose, event }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    // Validation manuelle des champs obligatoires
+    if (!form.title.trim()) {
+      toast.error("Le titre de l'événement est obligatoire.");
+      return;
+    }
+    if (!form.category) {
+      toast.error("La catégorie est obligatoire.");
+      return;
+    }
+    if (!form.date_start) {
+      toast.error("La date de début est obligatoire.");
+      return;
+    }
+    if (!form.city.trim()) {
+      toast.error("La ville est obligatoire.");
+      return;
+    }
     setLoading(true);
     const data = {
       ...form,
@@ -83,18 +120,24 @@ export default function EventFormDialog({ open, onClose, event }) {
       price: form.price ? Number(form.price) : 0,
     };
 
-    if (isEdit) {
-      await updateEvent(event.id, data);
-      toast.success("Événement mis à jour !");
-    } else {
-      await createEvent(data);
-      toast.success("Événement créé !");
+    try {
+      if (isEdit) {
+        await updateEvent(event.id, data);
+        toast.success("Événement mis à jour !");
+      } else {
+        await createEvent(data);
+        toast.success("Événement créé !");
+      }
+      queryClient.invalidateQueries({ queryKey: ["admin-events"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-events"] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      queryClient.invalidateQueries({ queryKey: ["featured-events"] });
+      setLoading(false);
+      onClose();
+    } catch (err) {
+      setLoading(false);
+      toast.error("Erreur lors de la création ou modification de l'événement.");
     }
-    queryClient.invalidateQueries({ queryKey: ["admin-events"] });
-    queryClient.invalidateQueries({ queryKey: ["events"] });
-    queryClient.invalidateQueries({ queryKey: ["featured-events"] });
-    setLoading(false);
-    onClose();
   };
 
   return (
@@ -209,6 +252,39 @@ export default function EventFormDialog({ open, onClose, event }) {
                 <span className="text-sm font-medium">Cliquez pour sélectionner une image</span>
                 <span className="text-xs">PNG, JPG, WEBP — depuis votre ordinateur</span>
               </button>
+            )}
+            <div className="text-xs text-muted-foreground mt-1">
+              <span>📏 Taille recommandée : <b>1200×630px</b> (format paysage).<br />
+              L'image sera automatiquement redimensionnée. Vous pouvez recadrer l'image avant l'envoi.</span>
+            </div>
+            {showCropper && (
+              <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
+                <div className="bg-white p-4 rounded-xl w-[90vw] max-w-xl border-4 border-red-500">
+                  <Cropper
+                    image={rawImage}
+                    crop={crop}
+                    zoom={zoom}
+                    aspect={1200/630}
+                    onCropChange={setCrop}
+                    onZoomChange={setZoom}
+                    onCropComplete={onCropComplete}
+                  />
+                  <div className="flex justify-end gap-2 mt-4 bg-yellow-200 p-2 rounded border border-yellow-400">
+                    <Button type="button" variant="outline" onClick={() => {
+                      setShowCropper(false);
+                      setRawImage(null);
+                    }}>Annuler</Button>
+                    <Button type="button" variant="secondary" onClick={() => {
+                      setShowCropper(false);
+                      // On garde l'image brute, pas de crop ni d'upload
+                    }}>Ignorer</Button>
+                    <Button type="button" onClick={handleCropConfirm} disabled={imageUploading}>
+                      {imageUploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                      Recadrer
+                    </Button>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
           <div className="space-y-1.5">

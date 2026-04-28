@@ -11,10 +11,10 @@ const getPayload = () => {
   const token = tokenStore.getCreatorToken();
   if (!token) return null;
   const p = decodeJwtPayload(token);
-  if (!p || p.exp * 1000 < Date.now()) {
-    tokenStore.clearCreatorToken();
-    return null;
-  }
+  // Don't reject expired tokens here — the API interceptor (apiClient.js) handles
+  // silent refresh via the HttpOnly refresh cookie. Clearing the token here would
+  // prevent the interceptor from knowing there's a session to refresh.
+  if (!p) return null;
   return p;
 };
 

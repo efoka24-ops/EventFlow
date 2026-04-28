@@ -158,17 +158,46 @@ router.post("/", requireAuth, async (req, res, next) => {
   }
 });
 
-router.put("/:id", requireAdmin, async (req, res, next) => {
+// Shared ownership check: admin always passes; creator must own the event
+const requireEventOwnership = async (req, res, next) => {
+  const ADMIN_ROLES = new Set(["super_admin", "admin", "support", "finance", "marketing", "moderator"]);
+  if (ADMIN_ROLES.has(req.user?.role)) return next();
+
+  // Creator: verify ownership by email or phone
+  const email = String(req.user?.email || "").trim().toLowerCase();
+  const phone = String(req.user?.phone || "").trim();
+
+  const event = await query(
+    `SELECT id FROM events WHERE id = $1 AND submitted_by_user = true
+     AND (
+       (LOWER(organizer_email) = LOWER($2) AND $2 <> '') OR
+       (organizer_phone = $3 AND $3 <> '')
+     )`,
+    [req.params.id, email, phone]
+  ).catch(() => null);
+
+  if (!event?.rowCount) {
+    return next(httpError(403, "Vous n'êtes pas autorisé à modifier cet événement"));
+  }
+  next();
+};
+
+// Fields creators are NOT allowed to change (e.g. approval_status, is_featured)
+const CREATOR_LOCKED_FIELDS = new Set(["approval_status", "is_featured", "submitted_by_user"]);
+
+router.put("/:id", requireAuth, requireEventOwnership, async (req, res, next) => {
   try {
-    const updates = Object.entries(req.body || {}).filter(
-      ([key, value]) => writableFields.includes(key) && value !== undefined
-    );
+    const isAdmin = ["super_admin", "admin", "moderator"].includes(req.user?.role);
+    const updates = Object.entries(req.body || {}).filter(([key, value]) => {
+      if (!writableFields.includes(key) || value === undefined) return false;
+      if (!isAdmin && CREATOR_LOCKED_FIELDS.has(key)) return false;
+      return true;
+    });
 
     if (!updates.length) return next(httpError(400, "No valid fields to update"));
 
     const setClause = updates.map(([key], i) => `${key} = $${i + 1}`).join(", ");
-    const values = updates.map(([, value]) => value);
-    values.push(req.params.id);
+    const values = [...updates.map(([, value]) => value), req.params.id];
 
     const result = await query(
       `UPDATE events SET ${setClause} WHERE id = $${values.length} RETURNING *`,
@@ -182,17 +211,19 @@ router.put("/:id", requireAdmin, async (req, res, next) => {
   }
 });
 
-router.patch("/:id", requireAdmin, async (req, res, next) => {
+router.patch("/:id", requireAuth, requireEventOwnership, async (req, res, next) => {
   try {
-    const updates = Object.entries(req.body || {}).filter(
-      ([key, value]) => writableFields.includes(key) && value !== undefined
-    );
+    const isAdmin = ["super_admin", "admin", "moderator"].includes(req.user?.role);
+    const updates = Object.entries(req.body || {}).filter(([key, value]) => {
+      if (!writableFields.includes(key) || value === undefined) return false;
+      if (!isAdmin && CREATOR_LOCKED_FIELDS.has(key)) return false;
+      return true;
+    });
 
     if (!updates.length) return next(httpError(400, "No valid fields to update"));
 
     const setClause = updates.map(([key], i) => `${key} = $${i + 1}`).join(", ");
-    const values = updates.map(([, value]) => value);
-    values.push(req.params.id);
+    const values = [...updates.map(([, value]) => value), req.params.id];
 
     const result = await query(
       `UPDATE events SET ${setClause} WHERE id = $${values.length} RETURNING *`,
@@ -206,8 +237,17 @@ router.patch("/:id", requireAdmin, async (req, res, next) => {
   }
 });
 
-router.delete("/:id", requireAdmin, async (req, res, next) => {
+router.delete("/:id", requireAuth, requireEventOwnership, async (req, res, next) => {
   try {
+    // Prevent deletion if there are confirmed/paid registrations
+    const hasRegs = await query(
+      `SELECT 1 FROM registrations WHERE event_id = $1 AND status IN ('validee', 'en_attente') LIMIT 1`,
+      [req.params.id]
+    );
+    if (hasRegs.rowCount && !["super_admin", "admin"].includes(req.user?.role)) {
+      return next(httpError(409, "Impossible de supprimer un événement avec des inscriptions actives"));
+    }
+
     const result = await query("DELETE FROM events WHERE id = $1 RETURNING id", [req.params.id]);
     if (!result.rowCount) return next(httpError(404, "Event not found"));
     res.json({ success: true, id: result.rows[0].id });

@@ -28,21 +28,24 @@ const getRegistrationStatusLabel = (status) => {
 
 const fitTitleLines = (doc, text, maxWidth) => {
   const safeText = text || "Événement";
-  const fontSizes = [14, 13, 12, 11, 10];
+  // Ajoute 9 et 8 pour gérer les titres très longs
+  const fontSizes = [14, 13, 12, 11, 10, 9, 8];
+  const maxLines = 4;
 
   for (const size of fontSizes) {
     doc.setFontSize(size);
+    // splitTextToSize gère bien les emojis et caractères spéciaux
     const lines = doc.splitTextToSize(safeText, maxWidth);
-    if (lines.length <= 3) {
+    if (lines.length <= maxLines) {
       return { lines, fontSize: size };
     }
   }
 
-  doc.setFontSize(10);
-  const lines = doc.splitTextToSize(safeText, maxWidth).slice(0, 3);
-  const lastLine = lines[2] || "";
-  lines[2] = lastLine.length > 3 ? `${lastLine.slice(0, -3)}...` : `${lastLine}...`;
-  return { lines, fontSize: 10 };
+  doc.setFontSize(8);
+  const lines = doc.splitTextToSize(safeText, maxWidth).slice(0, maxLines);
+  const lastLine = lines[maxLines - 1] || "";
+  lines[maxLines - 1] = lastLine.length > 3 ? `${lastLine.slice(0, -3)}...` : `${lastLine}...`;
+  return { lines, fontSize: 8 };
 };
 
 export async function generateTicketPDF({ event, registration, payment = null }) {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { listRegistrations, updateRegistration } from "@/api/registrationsApi";
 import { listMyEvents, deleteEvent } from "@/api/eventsApi";
@@ -74,10 +74,25 @@ function StatCard({ icon: Icon, label, value, sub, iconClass = "text-primary", b
 }
 
 // ══════════════════════════════════════════════════════════════════════════
+// Map URL path to tab value
+const PATH_TO_TAB = {
+  "/dashboard": "overview",
+  "/dashboard/events": "events",
+  "/dashboard/participants": "participants",
+  "/dashboard/revenue": "revenue",
+  "/dashboard/messages": "messaging",
+  "/dashboard/sponsors": "sponsors",
+  "/dashboard/analytics": "revenue", // analytics alias → revenue tab
+  "/dashboard/settings": "settings",
+};
+
 export default function UserDashboard() {
   const user = getCreatorUser();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
+
+  const activeTab = PATH_TO_TAB[location.pathname] || "overview";
 
   // ── Profile / settings state ───────────────────────────────────────────
   const [profileForm, setProfileForm] = useState({ full_name: "", email: "", phone: "" });
@@ -445,8 +460,11 @@ export default function UserDashboard() {
 
       {/* ── Tabs ──────────────────────────────────────────────────────── */}
       <motion.div {...fadeUp(0.08)}>
-        <Tabs defaultValue="overview">
-          <div className="overflow-x-auto pb-1">
+        <Tabs value={activeTab} onValueChange={(tab) => {
+          const route = Object.entries(PATH_TO_TAB).find(([, v]) => v === tab)?.[0] || "/dashboard";
+          navigate(route);
+        }}>
+          <div className="overflow-x-auto pb-1 lg:hidden">
             <TabsList className="rounded-full w-max">
               <TabsTrigger value="overview" className="rounded-full gap-1.5"><BarChart3 className="w-3.5 h-3.5" />Vue d'ensemble</TabsTrigger>
               <TabsTrigger value="events" className="rounded-full gap-1.5"><CalendarDays className="w-3.5 h-3.5" />Événements</TabsTrigger>

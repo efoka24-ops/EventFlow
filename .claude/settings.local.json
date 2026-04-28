@@ -6,7 +6,13 @@
       "Bash(sed 's/ .*//')",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "PowerShell($proc = Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -First 1; if \\($proc\\) { Stop-Process -Id $proc -Force; \"Killed PID $proc on port 3001\" } else { \"No process on port 3001\" })",
+      "Bash(npx vite *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(npm run *)",
+      "Bash(npx playwright *)",
+      "Bash(grep -qE \"passed|failed$|did not run\" \"C:/Users/EMMANUEL/AppData/Local/Temp/claude/c--Users-EMMANUEL-Downloads-EventFlow/9247c065-4b53-41e4-b592-3d6e6df5703d/tasks/b0lfe8c67.output\")"
     ]
   }
 }

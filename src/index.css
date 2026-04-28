@@ -79,11 +79,22 @@
 }
 
 @layer base {
+  html, body, #root {
+    width: 100vw;
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
+  }
+  img, video, iframe {
+    max-width: 100%;
+    height: auto;
+    display: block;
   }
 }

@@ -50,6 +50,7 @@ export const getCreatorUser = () => {
   const token = tokenStore.getCreatorToken();
   if (!token) return null;
   const payload = decodeJwtPayload(token);
+  // Don't reject expired tokens — the refresh interceptor will renew on next API call
   if (!payload) { tokenStore.clearCreatorToken(); return null; }
   return { ...payload, role: "creator" };
 };

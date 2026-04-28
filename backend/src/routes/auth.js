@@ -115,7 +115,7 @@ router.post("/creator/signup", async (req, res, next) => {
     );
 
     const user = created.rows[0];
-    const token = signToken({ sub: user.id, role: "creator", email: user.email || null, phone: user.phone || null });
+    const token = signToken({ sub: user.id, role: "creator", email: user.email || null, phone: user.phone || null, full_name: user.full_name || null });
 
     let refreshRaw = null;
     try {
@@ -152,7 +152,7 @@ router.post("/creator/login", async (req, res, next) => {
     if (!isValid) return next(httpError(401, "Invalid credentials"));
 
     const user = { id: account.id, full_name: account.full_name, email: account.email, phone: account.phone };
-    const token = signToken({ sub: user.id, role: "creator", email: user.email || null, phone: user.phone || null });
+    const token = signToken({ sub: user.id, role: "creator", email: user.email || null, phone: user.phone || null, full_name: user.full_name || null });
 
     try {
       const refreshRaw = await issueRefreshToken(user.id, "creator", req.headers["user-agent"]);
@@ -295,7 +295,7 @@ router.post("/refresh", async (req, res, next) => {
       }
     } else {
       const creator = await query(
-        `SELECT id, email, phone FROM creator_accounts WHERE id = $1 LIMIT 1`,
+        `SELECT id, full_name, email, phone FROM creator_accounts WHERE id = $1 LIMIT 1`,
         [stored.user_id]
       );
       if (!creator.rowCount) {
@@ -303,7 +303,7 @@ router.post("/refresh", async (req, res, next) => {
         return next(httpError(401, "Account not found"));
       }
       const c = creator.rows[0];
-      accessToken = signToken({ sub: c.id, role: "creator", email: c.email || null, phone: c.phone || null });
+      accessToken = signToken({ sub: c.id, role: "creator", email: c.email || null, phone: c.phone || null, full_name: c.full_name || null });
     }
 
     res.json({ token: accessToken, user_type: stored.user_type });

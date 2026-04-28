@@ -7,6 +7,7 @@ import PageNotFound from './lib/PageNotFound';
 import { AuthProvider, useAuth } from '@/libs/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
+import OrganizerLayout from '@/components/organizer/OrganizerLayout';
 import MaintenancePage from '@/components/pages/MaintenancePage';
 import { fetchPublicSettings } from '@/api/publicSettingsApi';
 import AdminLayout from '@/components/admin/AdminLayout';
@@ -122,10 +123,24 @@ const AuthenticatedApp = () => {
         <Route path="/submit-event" element={<SubmitEvent />} />
         <Route path="/participant/profile" element={<ParticipantProfile />} />
         <Route path="/participant/tickets" element={<ParticipantTickets />} />
-        <Route path="/dashboard" element={getCreatorUser() ? <UserDashboard /> : <Navigate to="/submit-event?auth=login" replace />} />
-        <Route path="/dashboard/events" element={getCreatorUser() ? <UserEventsDashboard /> : <Navigate to="/submit-event?auth=login" replace />} />
         <Route path="/admin/login" element={<AdminLogin />} />
       </Route>
+
+      {/* ── Organizer portal (with sidebar layout) ── */}
+      {getCreatorUser() ? (
+        <Route element={<OrganizerLayout />}>
+          <Route path="/dashboard" element={<UserDashboard />} />
+          <Route path="/dashboard/events" element={<UserDashboard />} />
+          <Route path="/dashboard/participants" element={<UserDashboard />} />
+          <Route path="/dashboard/revenue" element={<UserDashboard />} />
+          <Route path="/dashboard/analytics" element={<UserDashboard />} />
+          <Route path="/dashboard/messages" element={<UserDashboard />} />
+          <Route path="/dashboard/sponsors" element={<UserDashboard />} />
+          <Route path="/dashboard/settings" element={<UserDashboard />} />
+        </Route>
+      ) : (
+        <Route path="/dashboard/*" element={<Navigate to="/submit-event?auth=login" replace />} />
+      )}
       {canAccessAdmin && (
         <Route element={<AdminLayout />}>
           {/* Dashboard — tous les rôles */}
