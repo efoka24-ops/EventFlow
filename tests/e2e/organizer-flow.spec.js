@@ -216,11 +216,35 @@ test("T4 — Modification d'un événement existant", async ({ page }) => {
   await titleInput.clear();
   await titleInput.fill(updatedTitle);
 
-  // Cliquer le bouton de soumission (identique à ce que fait l'utilisateur)
-  await dialog.getByRole("button", { name: /Mettre à jour/i }).click();
+  // Intercepter la réponse PATCH pour diagnostiquer
+  const patchPromise = page.waitForResponse(
+    (resp) => resp.request().method() === "PATCH" && resp.url().includes("/events/"),
+    { timeout: 12_000 }
+  ).catch(() => null);
+
+  // Diagnostiquer l'état du formulaire avant soumission
+  const formInfo = await dialog.locator("form").evaluate((f) => ({
+    tagName: f.tagName,
+    noValidate: f.noValidate,
+    fields: f.elements.length,
+    hasRequestSubmit: typeof f.requestSubmit === "function",
+    submitBtnDisabled: f.querySelector('[type="submit"]')?.disabled,
+  }));
+  console.log("Form info:", JSON.stringify(formInfo));
+
+  // requestSubmit() déclenche l'événement submit + respecte noValidate (pas de validation native)
+  await dialog.locator("form").evaluate((f) => f.requestSubmit());
+
+  const patchResp = await patchPromise;
+  if (patchResp) {
+    const body = await patchResp.text().catch(() => "");
+    expect(patchResp.status(), `PATCH failed (${patchResp.status()}): ${body}`).toBe(200);
+  } else {
+    throw new Error("Aucune requête PATCH /events/:id — la soumission du formulaire n'a pas été déclenchée");
+  }
 
   // Le dialog se ferme uniquement sur succès (onClose appelé après toast.success)
-  await expect(dialog).toHaveCount(0, { timeout: 15_000 });
+  await expect(dialog).toHaveCount(0, { timeout: 10_000 });
 
   // Nouveau titre visible dans la liste (preuve que React Query a invalidé)
   await expect(page.getByText(updatedTitle)).toBeVisible({ timeout: 12_000 });

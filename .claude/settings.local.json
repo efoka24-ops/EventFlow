@@ -12,7 +12,19 @@
       "Bash(echo \"EXIT:$?\")",
       "Bash(npm run *)",
       "Bash(npx playwright *)",
-      "Bash(grep -qE \"passed|failed$|did not run\" \"C:/Users/EMMANUEL/AppData/Local/Temp/claude/c--Users-EMMANUEL-Downloads-EventFlow/9247c065-4b53-41e4-b592-3d6e6df5703d/tasks/b0lfe8c67.output\")"
+      "Bash(grep -qE \"passed|failed$|did not run\" \"C:/Users/EMMANUEL/AppData/Local/Temp/claude/c--Users-EMMANUEL-Downloads-EventFlow/9247c065-4b53-41e4-b592-3d6e6df5703d/tasks/b0lfe8c67.output\")",
+      "Bash(xargs grep *)",
+      "Bash(node src/scripts/migrateDb.js)",
+      "Bash(curl -s http://localhost:3000/api/public-settings)",
+      "Bash(curl -s http://localhost:5000/api/public-settings)",
+      "Bash(curl -s http://localhost:3001/api/public-settings)",
+      "Bash(node -e \"import\\('./src/routes/formFields.js'\\).then\\(\\(\\) => console.log\\('OK'\\)\\).catch\\(e => console.error\\(e.message\\)\\)\")",
+      "Bash(curl -s http://localhost:3001/api/form-fields?event_id=00000000-0000-0000-0000-000000000000)",
+      "Bash(netstat -ano)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(curl -s http://localhost:3001/api/events?limit=3)",
+      "Bash(curl -s -X POST http://localhost:3001/api/auth/creator/login -H 'Content-Type: application/json' -d '{\"identifier\":\"efoka24@gmail.com\",\"password\":\"test\"}')",
+      "Bash(node -e ' *)"
     ]
   }
 }

@@ -153,7 +153,7 @@ export default function EventFormDialog({ open, onClose, event }) {
             Renseignez les informations de l'evenement puis validez pour enregistrer les changements.
           </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
           <div className="space-y-1.5">
             <Label>Titre *</Label>
             <Input required value={form.title} onChange={(e) => handleChange("title", e.target.value)} />

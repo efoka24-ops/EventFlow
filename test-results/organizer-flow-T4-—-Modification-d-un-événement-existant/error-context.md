@@ -12,7 +12,7 @@
 # Error details
 
 ```
-TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for event "response"
+Error: Aucune requête PATCH /events/:id — la soumission du formulaire n'a pas été déclenchée
 ```
 
 # Page snapshot
@@ -39,7 +39,7 @@ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for e
                 - generic: E
               - generic:
                 - paragraph: E2E Organisateur
-                - paragraph: e2e.org.1777358686715@test.local
+                - paragraph: e2e.org.1777392888928@test.local
           - generic:
             - paragraph: Mon espace
             - link:
@@ -103,7 +103,7 @@ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for e
                   - generic: EO
                 - generic:
                   - heading [level=1]: E2E Organisateur
-                  - paragraph: e2e.org.1777358686715@test.local · Organisateur
+                  - paragraph: e2e.org.1777392888928@test.local · Organisateur
               - button:
                 - img
                 - text: Créer un événement
@@ -164,7 +164,7 @@ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for e
                             - generic: "29"
                           - generic:
                             - generic:
-                              - paragraph: "[E2E] Concert 1777358686715"
+                              - paragraph: "[E2E] Concert 1777392888928"
                               - generic:
                                 - generic: À venir
                                 - generic: Brouillon
@@ -178,7 +178,7 @@ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for e
                               - generic: 0.00 FCFA/billet
                           - generic:
                             - link:
-                              - /url: /events/43ca393a-802e-408a-82e1-20c37c62d360
+                              - /url: /events/b6e3f858-5010-446e-9280-66359f6fa8d8
                               - button:
                                 - img
                             - button:
@@ -193,7 +193,7 @@ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for e
     - generic [ref=e6]:
       - generic [ref=e7]:
         - text: Titre *
-        - textbox [ref=e8]: "[E2E] Concert 1777358686715 — MODIFIÉ"
+        - textbox [active] [ref=e8]: "[E2E] Concert 1777392888928 — MODIFIÉ"
       - generic [ref=e9]:
         - text: Description
         - textbox [ref=e10]
@@ -213,7 +213,7 @@ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for e
       - generic [ref=e22]:
         - generic [ref=e23]:
           - text: Date de début *
-          - textbox [active] [ref=e24]
+          - textbox [ref=e24]
         - generic [ref=e25]:
           - text: Date de fin
           - textbox [ref=e26]
@@ -257,19 +257,6 @@ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for e
 # Test source
 
 ```ts
-  120 | 
-  121 | // ══════════════════════════════════════════════════════════════════════════════
-  122 | // T2 — Accès dashboard : layout et navigation sidebar
-  123 | // ══════════════════════════════════════════════════════════════════════════════
-  124 | test("T2 — Dashboard organisateur : sidebar et navigation", async ({ page }) => {
-  125 |   await injectToken(page, creatorToken);
-  126 |   await page.goto("/dashboard");
-  127 | 
-  128 |   const sidebar = page.locator("aside").first();
-  129 |   await expect(sidebar).toBeVisible({ timeout: 10_000 });
-  130 | 
-  131 |   // Items de navigation attendus dans le sidebar
-  132 |   for (const label of ["Vue d'ensemble", "Mes Événements", "Participants", "Revenus", "Se déconnecter"]) {
   133 |     await expect(sidebar.getByText(label)).toBeVisible();
   134 |   }
   135 | 
@@ -339,80 +326,81 @@ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for e
   199 |   await page.goto("/dashboard/events");
   200 | 
   201 |   // Attendre que l'événement de T3 soit visible
-  202 |   await expect(page.getByText(createdEventTitle)).toBeVisible({ timeout: 12_000 });
-  203 | 
-  204 |   // Bouton Modifier (attribut title="Modifier" sur l'icône crayon)
-  205 |   await page.locator('[title="Modifier"]').first().click();
-  206 | 
-  207 |   // Dialog en mode édition
-  208 |   const dialog = page.getByRole("dialog");
-  209 |   await expect(dialog).toBeVisible({ timeout: 5_000 });
-  210 |   await expect(dialog.getByText("Modifier l'événement")).toBeVisible();
-  211 | 
-  212 |   // Modifier le titre
-  213 |   const updatedTitle = `${createdEventTitle} — MODIFIÉ`;
-  214 |   const titleInput = inputAfterLabel(dialog, "Titre");
-  215 |   await titleInput.clear();
-  216 |   await titleInput.fill(updatedTitle);
-  217 | 
-  218 |   // Enregistrer → "Mettre à jour" ; intercepter la réponse PATCH pour diagnostiquer
-  219 |   const [patchRes] = await Promise.all([
-> 220 |     page.waitForResponse(
-      |          ^ TimeoutError: page.waitForResponse: Timeout 15000ms exceeded while waiting for event "response"
-  221 |       (r) => /\/api\/events\//.test(r.url()) && r.request().method() === "PATCH",
-  222 |       { timeout: 15_000 }
-  223 |     ),
-  224 |     dialog.getByRole("button", { name: /Mettre à jour/i }).click(),
-  225 |   ]);
-  226 | 
-  227 |   // Vérifier que le PATCH a réussi (2xx)
-  228 |   const patchStatus = patchRes.status();
-  229 |   const patchBody = await patchRes.text().catch(() => "");
-  230 |   expect(patchStatus, `PATCH /events/:id a échoué (${patchStatus}): ${patchBody}`).toBeLessThan(300);
-  231 | 
-  232 |   // Toast de confirmation
-  233 |   await expect(page.getByText("Événement mis à jour !")).toBeVisible({ timeout: 8_000 });
-  234 | 
-  235 |   // Dialog fermé
-  236 |   await expect(dialog).toHaveCount(0, { timeout: 5_000 });
-  237 | 
-  238 |   // Nouveau titre visible dans la liste
-  239 |   await expect(page.getByText(updatedTitle)).toBeVisible({ timeout: 12_000 });
-  240 | 
-  241 |   createdEventTitle = updatedTitle;
-  242 | });
-  243 | 
-  244 | // ══════════════════════════════════════════════════════════════════════════════
-  245 | // T5 — Déconnexion et protection de la route /dashboard
-  246 | // ══════════════════════════════════════════════════════════════════════════════
-  247 | test("T5 — Déconnexion et protection de la route /dashboard", async ({ page }) => {
-  248 |   // setTokenOnce (evaluate) plutôt que injectToken (addInitScript).
-  249 |   // addInitScript réinjecte le token après la navigation déclenchée par logout,
-  250 |   // ce qui ferait échouer la vérification "token supprimé".
-  251 |   await page.goto("/");
-  252 |   await setTokenOnce(page, creatorToken);
-  253 |   await page.goto("/dashboard");
-  254 | 
-  255 |   // Sidebar visible
-  256 |   const sidebar = page.locator("aside").first();
-  257 |   await expect(sidebar).toBeVisible({ timeout: 10_000 });
-  258 | 
-  259 |   // Cliquer "Se déconnecter"
-  260 |   await sidebar.getByText("Se déconnecter").click();
-  261 | 
-  262 |   // Retour à la home après déconnexion
-  263 |   await page.waitForURL("http://localhost:5173/", { timeout: 10_000 });
-  264 | 
-  265 |   // Token supprimé du localStorage
-  266 |   const token = await page.evaluate(() =>
-  267 |     window.localStorage.getItem("eventflow_creator_token")
-  268 |   );
-  269 |   expect(token).toBeNull();
-  270 | 
-  271 |   // Tentative d'accès direct au dashboard → redirect vers /submit-event
-  272 |   await page.goto("/dashboard");
-  273 |   await page.waitForURL(/\/submit-event/, { timeout: 10_000 });
-  274 |   await expect(page.getByText("Votre compte organisateur")).toBeVisible({ timeout: 5_000 });
-  275 | });
-  276 | 
+  202 |   const eventRow = page.locator("div, li, tr").filter({ hasText: createdEventTitle }).first();
+  203 |   await expect(eventRow).toBeVisible({ timeout: 12_000 });
+  204 | 
+  205 |   // Cliquer le bouton Modifier le plus proche de la ligne de l'événement
+  206 |   await eventRow.locator('[title="Modifier"]').click();
+  207 | 
+  208 |   // Dialog en mode édition
+  209 |   const dialog = page.getByRole("dialog");
+  210 |   await expect(dialog).toBeVisible({ timeout: 5_000 });
+  211 |   await expect(dialog.getByText("Modifier l'événement")).toBeVisible();
+  212 | 
+  213 |   // Modifier le titre
+  214 |   const updatedTitle = `${createdEventTitle} — MODIFIÉ`;
+  215 |   const titleInput = inputAfterLabel(dialog, "Titre");
+  216 |   await titleInput.clear();
+  217 |   await titleInput.fill(updatedTitle);
+  218 | 
+  219 |   // Intercepter la réponse PATCH pour diagnostiquer
+  220 |   const patchPromise = page.waitForResponse(
+  221 |     (resp) => resp.request().method() === "PATCH" && resp.url().includes("/events/"),
+  222 |     { timeout: 12_000 }
+  223 |   ).catch(() => null);
+  224 | 
+  225 |   // requestSubmit() déclenche l'événement submit + respecte noValidate (pas de validation native)
+  226 |   await dialog.locator("form").evaluate((f) => f.requestSubmit());
+  227 | 
+  228 |   const patchResp = await patchPromise;
+  229 |   if (patchResp) {
+  230 |     const body = await patchResp.text().catch(() => "");
+  231 |     expect(patchResp.status(), `PATCH failed (${patchResp.status()}): ${body}`).toBe(200);
+  232 |   } else {
+> 233 |     throw new Error("Aucune requête PATCH /events/:id — la soumission du formulaire n'a pas été déclenchée");
+      |           ^ Error: Aucune requête PATCH /events/:id — la soumission du formulaire n'a pas été déclenchée
+  234 |   }
+  235 | 
+  236 |   // Le dialog se ferme uniquement sur succès (onClose appelé après toast.success)
+  237 |   await expect(dialog).toHaveCount(0, { timeout: 10_000 });
+  238 | 
+  239 |   // Nouveau titre visible dans la liste (preuve que React Query a invalidé)
+  240 |   await expect(page.getByText(updatedTitle)).toBeVisible({ timeout: 12_000 });
+  241 | 
+  242 |   createdEventTitle = updatedTitle;
+  243 | });
+  244 | 
+  245 | // ══════════════════════════════════════════════════════════════════════════════
+  246 | // T5 — Déconnexion et protection de la route /dashboard
+  247 | // ══════════════════════════════════════════════════════════════════════════════
+  248 | test("T5 — Déconnexion et protection de la route /dashboard", async ({ page }) => {
+  249 |   // setTokenOnce (evaluate) plutôt que injectToken (addInitScript).
+  250 |   // addInitScript réinjecte le token après la navigation déclenchée par logout,
+  251 |   // ce qui ferait échouer la vérification "token supprimé".
+  252 |   await page.goto("/");
+  253 |   await setTokenOnce(page, creatorToken);
+  254 |   await page.goto("/dashboard");
+  255 | 
+  256 |   // Sidebar visible
+  257 |   const sidebar = page.locator("aside").first();
+  258 |   await expect(sidebar).toBeVisible({ timeout: 10_000 });
+  259 | 
+  260 |   // Cliquer "Se déconnecter"
+  261 |   await sidebar.getByText("Se déconnecter").click();
+  262 | 
+  263 |   // Retour à la home après déconnexion
+  264 |   await page.waitForURL("http://localhost:5173/", { timeout: 10_000 });
+  265 | 
+  266 |   // Token supprimé du localStorage
+  267 |   const token = await page.evaluate(() =>
+  268 |     window.localStorage.getItem("eventflow_creator_token")
+  269 |   );
+  270 |   expect(token).toBeNull();
+  271 | 
+  272 |   // Tentative d'accès direct au dashboard → redirect vers /submit-event
+  273 |   await page.goto("/dashboard");
+  274 |   await page.waitForURL(/\/submit-event/, { timeout: 10_000 });
+  275 |   await expect(page.getByText("Votre compte organisateur")).toBeVisible({ timeout: 5_000 });
+  276 | });
+  277 | 
 ```
