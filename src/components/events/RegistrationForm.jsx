@@ -1,9 +1,13 @@
 import { useState, useEffect, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { createRegistration } from "@/api/registrationsApi";
+import { listFormFields } from "@/api/formFieldsApi";
 import { getCreatorUser } from "@/lib/creatorSession";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -243,6 +247,14 @@ export default function RegistrationForm({ event, onSuccess }) {
     phone: "",
     gender: "",
   });
+  const [extraData, setExtraData] = useState({});
+
+  const { data: customFields = [] } = useQuery({
+    queryKey: ["form-fields", event?.id],
+    queryFn: () => listFormFields(event.id),
+    enabled: !!event?.id,
+    staleTime: 60_000,
+  });
 
   useEffect(() => {
     const participantEmail = getParticipantEmail();
@@ -369,6 +381,7 @@ export default function RegistrationForm({ event, onSuccess }) {
         has_gmail_account: hasGmailAccount,
         status: isPaidEvent ? "en_attente_paiement" : "en_attente",
         registration_method: "formulaire",
+        extra_data: extraData,
       };
 
       const created = await createRegistration(registrationData);
@@ -653,6 +666,96 @@ export default function RegistrationForm({ event, onSuccess }) {
               </div>
             </div>
           </div>
+
+          {/* Champs personnalisés configurés par l'admin pour cet événement */}
+          {customFields.length > 0 && (
+            <div className="space-y-4 pt-2 border-t border-border">
+              {customFields.map((field) => {
+                const val = extraData[field.field_key] ?? "";
+                const setVal = (v) =>
+                  setExtraData((prev) => ({ ...prev, [field.field_key]: v }));
+
+                return (
+                  <div key={field.id} className="space-y-1.5">
+                    <Label htmlFor={`ef-${field.field_key}`}>
+                      {field.field_label}
+                      {field.is_required && <span className="text-destructive ml-1">*</span>}
+                    </Label>
+
+                    {(field.field_type === "text" || field.field_type === "email" || field.field_type === "tel") && (
+                      <Input
+                        id={`ef-${field.field_key}`}
+                        type={field.field_type}
+                        value={val}
+                        onChange={(e) => setVal(e.target.value)}
+                        placeholder={field.placeholder || ""}
+                        required={field.is_required}
+                      />
+                    )}
+
+                    {field.field_type === "number" && (
+                      <Input
+                        id={`ef-${field.field_key}`}
+                        type="number"
+                        value={val}
+                        onChange={(e) => setVal(e.target.value)}
+                        placeholder={field.placeholder || ""}
+                        required={field.is_required}
+                      />
+                    )}
+
+                    {field.field_type === "date" && (
+                      <Input
+                        id={`ef-${field.field_key}`}
+                        type="date"
+                        value={val}
+                        onChange={(e) => setVal(e.target.value)}
+                        required={field.is_required}
+                      />
+                    )}
+
+                    {field.field_type === "textarea" && (
+                      <Textarea
+                        id={`ef-${field.field_key}`}
+                        value={val}
+                        onChange={(e) => setVal(e.target.value)}
+                        placeholder={field.placeholder || ""}
+                        required={field.is_required}
+                        rows={3}
+                      />
+                    )}
+
+                    {field.field_type === "select" && (
+                      <Select value={val} onValueChange={setVal} required={field.is_required}>
+                        <SelectTrigger id={`ef-${field.field_key}`}>
+                          <SelectValue placeholder={field.placeholder || "Sélectionner…"} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(field.field_options || []).map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {field.field_type === "checkbox" && (
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`ef-${field.field_key}`}
+                          checked={val === true || val === "true"}
+                          onCheckedChange={(checked) => setVal(checked)}
+                          required={field.is_required}
+                        />
+                        <label htmlFor={`ef-${field.field_key}`} className="text-sm text-muted-foreground cursor-pointer">
+                          {field.placeholder || field.field_label}
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
             {loading && <Loader2 className="w-4 h-4 animate-spin mr-2" />}

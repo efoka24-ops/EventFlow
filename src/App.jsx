@@ -1,10 +1,7 @@
-import { Toaster } from "@/components/ui/toaster"
-import { Toaster as SonnerToaster } from "@/components/ui/sonner"
-import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { queryClientInstance } from '@/lib/query-client'
-import { BrowserRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query'
+import { Navigate, Route, Routes } from 'react-router-dom';
 import PageNotFound from './lib/PageNotFound';
-import { AuthProvider, useAuth } from '@/libs/AuthContext';
+import { useAuth } from '@/libs/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AppLayout from '@/components/layout/AppLayout';
 import OrganizerLayout from '@/components/organizer/OrganizerLayout';
@@ -42,15 +39,27 @@ import AdminCMS from '@/components/pages/admin/AdminCMS';
 import AdminRoles from '@/components/pages/admin/AdminRoles';
 import AdminTestimonials from '@/components/pages/admin/AdminTestimonials';
 import AdminPremium from '@/components/pages/admin/AdminPremium';
-import SiteAnalyticsTracker from '@/components/analytics/SiteAnalyticsTracker';
+
 import { getCreatorUser } from '@/lib/creatorSession';
+import { useEffect, useState } from 'react';
 
 const ADMIN_ROLES = new Set(["super_admin", "admin", "support", "finance", "marketing", "moderator"]);
+
 
 const isAdminUser = (user) => {
   if (!user) return false;
   return Boolean(user.isAdmin || user.is_admin || ADMIN_ROLES.has(user.role));
 };
+
+function useCreatorSession() {
+  const [creatorUser, setCreatorUser] = useState(() => getCreatorUser());
+  useEffect(() => {
+    const handler = () => setCreatorUser(getCreatorUser());
+    window.addEventListener("creator-session-changed", handler);
+    return () => window.removeEventListener("creator-session-changed", handler);
+  }, []);
+  return creatorUser;
+}
 
 // Renders element only if user's role is in allowedRoles; otherwise shows "Accès refusé".
 const AdminRoute = ({ element, allowedRoles, user }) => {
@@ -76,6 +85,7 @@ const AdminRoute = ({ element, allowedRoles, user }) => {
 const AuthenticatedApp = () => {
   const { isLoadingAuth, authError, navigateToLogin, user } = useAuth();
   const canAccessAdmin = isAdminUser(user);
+  const creatorUser = useCreatorSession();
 
   const { data: publicSettings, isLoading: isLoadingPublicSettings } = useQuery({
     queryKey: ["public-settings"],
@@ -114,90 +124,80 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
-      <Route element={<AppLayout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/events" element={<Events />} />
-        <Route path="/events/:id" element={<EventDetail />} />
-        <Route path="/help" element={<Help />} />
-        <Route path="/legal/:slug" element={<LegalPage />} />
-        <Route path="/submit-event" element={<SubmitEvent />} />
-        <Route path="/participant/profile" element={<ParticipantProfile />} />
-        <Route path="/participant/tickets" element={<ParticipantTickets />} />
-        <Route path="/admin/login" element={<AdminLogin />} />
-      </Route>
+      <>
+        <Route element={<AppLayout />}>
+          <>
+            <Route path="/" element={<Home />} />
+            <Route path="/events" element={<Events />} />
+            <Route path="/events/:id" element={<EventDetail />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/legal/:slug" element={<LegalPage />} />
+            <Route path="/submit-event" element={<SubmitEvent />} />
+            <Route path="/participant/profile" element={<ParticipantProfile />} />
+            <Route path="/participant/tickets" element={<ParticipantTickets />} />
+            <Route path="/admin/login" element={<AdminLogin />} />
+          </>
+        </Route>
 
-      {/* ── Organizer portal (with sidebar layout) ── */}
-      {getCreatorUser() ? (
-        <Route element={<OrganizerLayout />}>
-          <Route path="/dashboard" element={<UserDashboard />} />
-          <Route path="/dashboard/events" element={<UserDashboard />} />
-          <Route path="/dashboard/participants" element={<UserDashboard />} />
-          <Route path="/dashboard/revenue" element={<UserDashboard />} />
-          <Route path="/dashboard/analytics" element={<UserDashboard />} />
-          <Route path="/dashboard/messages" element={<UserDashboard />} />
-          <Route path="/dashboard/sponsors" element={<UserDashboard />} />
-          <Route path="/dashboard/settings" element={<UserDashboard />} />
-        </Route>
-      ) : (
-        <Route path="/dashboard/*" element={<Navigate to="/submit-event?auth=login" replace />} />
-      )}
-      {canAccessAdmin && (
-        <Route element={<AdminLayout />}>
-          {/* Dashboard — tous les rôles */}
-          <Route path="/admin" element={<Dashboard />} />
-          {/* Utilisateurs */}
-          <Route path="/admin/participants" element={<AdminRoute element={<AdminParticipants />} allowedRoles={["admin","support"]} user={user} />} />
-          <Route path="/admin/organizers" element={<AdminRoute element={<AdminOrganizers />} allowedRoles={["admin","moderator"]} user={user} />} />
-          <Route path="/admin/accounts" element={<AdminRoute element={<AdminAccounts />} allowedRoles={["admin"]} user={user} />} />
-          {/* Événements */}
-          <Route path="/admin/events" element={<AdminRoute element={<AdminEvents />} allowedRoles={["admin","moderator"]} user={user} />} />
-          <Route path="/admin/marketplace" element={<AdminRoute element={<AdminMarketplace />} allowedRoles={["admin","marketing"]} user={user} />} />
-          {/* Inscriptions */}
-          <Route path="/admin/registrations" element={<AdminRoute element={<AdminRegistrations />} allowedRoles={["admin","support"]} user={user} />} />
-          {/* Finance */}
-          <Route path="/admin/payments" element={<AdminRoute element={<AdminPayments />} allowedRoles={["admin","finance","support"]} user={user} />} />
-          <Route path="/admin/revenue" element={<AdminRoute element={<AdminRevenue />} allowedRoles={["admin","finance"]} user={user} />} />
-          {/* Croissance */}
-          <Route path="/admin/marketing" element={<AdminRoute element={<AdminMarketing />} allowedRoles={["admin","marketing"]} user={user} />} />
-          <Route path="/admin/notifications-system" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
-          {/* Contenu & Config */}
-          <Route path="/admin/cms" element={<AdminRoute element={<AdminCMS />} allowedRoles={["admin","marketing"]} user={user} />} />
-          <Route path="/admin/testimonials" element={<AdminRoute element={<AdminTestimonials />} allowedRoles={["admin","marketing"]} user={user} />} />
-          <Route path="/admin/categories" element={<AdminRoute element={<AdminCategories />} allowedRoles={["admin"]} user={user} />} />
-          <Route path="/admin/settings" element={<AdminRoute element={<AdminSettings />} allowedRoles={["super_admin"]} user={user} />} />
-          {/* Sécurité */}
-          <Route path="/admin/security" element={<AdminRoute element={<AdminSecurity />} allowedRoles={["admin","moderator","support"]} user={user} />} />
-          <Route path="/admin/roles" element={<AdminRoute element={<AdminRoles />} allowedRoles={["super_admin"]} user={user} />} />
-          {/* Analytics */}
-          <Route path="/admin/analytics" element={<AdminRoute element={<AdminAnalytics />} allowedRoles={["admin","marketing"]} user={user} />} />
-          <Route path="/admin/premium" element={<AdminRoute element={<AdminPremium />} allowedRoles={["super_admin"]} user={user} />} />
-          {/* Legacy */}
-          <Route path="/admin/activity-log" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
-          <Route path="/admin/user-activity" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
-          <Route path="/admin/help" element={<AdminRoute element={<AdminHelp />} allowedRoles={["admin","support"]} user={user} />} />
-        </Route>
-      )}
-      {!canAccessAdmin && <Route path="/admin/*" element={<Navigate to="/admin/login" replace />} />}
-      <Route path="*" element={<PageNotFound />} />
+        {/* ── Organizer portal (with sidebar layout) ── */}
+        {creatorUser ? (
+          <Route element={<OrganizerLayout />}>
+            <Route path="/dashboard" element={<UserDashboard />} />
+            <Route path="/dashboard/events" element={<UserDashboard />} />
+            <Route path="/dashboard/participants" element={<UserDashboard />} />
+            <Route path="/dashboard/revenue" element={<UserDashboard />} />
+            <Route path="/dashboard/analytics" element={<UserDashboard />} />
+            <Route path="/dashboard/messages" element={<UserDashboard />} />
+            <Route path="/dashboard/sponsors" element={<UserDashboard />} />
+            <Route path="/dashboard/settings" element={<UserDashboard />} />
+          </Route>
+        ) : (
+          <Route path="/dashboard/*" element={<Navigate to="/submit-event?auth=login" replace />} />
+        )}
+        {canAccessAdmin && (
+          <Route element={<AdminLayout />}>
+            <>
+              {/* Dashboard — tous les rôles */}
+              <Route path="/admin" element={<Dashboard />} />
+              {/* Utilisateurs */}
+              <Route path="/admin/participants" element={<AdminRoute element={<AdminParticipants />} allowedRoles={["admin","support"]} user={user} />} />
+              <Route path="/admin/organizers" element={<AdminRoute element={<AdminOrganizers />} allowedRoles={["admin","moderator"]} user={user} />} />
+              <Route path="/admin/accounts" element={<AdminRoute element={<AdminAccounts />} allowedRoles={["admin"]} user={user} />} />
+              {/* Événements */}
+              <Route path="/admin/events" element={<AdminRoute element={<AdminEvents />} allowedRoles={["admin","moderator"]} user={user} />} />
+              <Route path="/admin/marketplace" element={<AdminRoute element={<AdminMarketplace />} allowedRoles={["admin","marketing"]} user={user} />} />
+              {/* Inscriptions */}
+              <Route path="/admin/registrations" element={<AdminRoute element={<AdminRegistrations />} allowedRoles={["admin","support"]} user={user} />} />
+              {/* Finance */}
+              <Route path="/admin/payments" element={<AdminRoute element={<AdminPayments />} allowedRoles={["admin","finance","support"]} user={user} />} />
+              <Route path="/admin/revenue" element={<AdminRoute element={<AdminRevenue />} allowedRoles={["admin","finance"]} user={user} />} />
+              {/* Croissance */}
+              <Route path="/admin/marketing" element={<AdminRoute element={<AdminMarketing />} allowedRoles={["admin","marketing"]} user={user} />} />
+              <Route path="/admin/notifications-system" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
+              {/* Contenu & Config */}
+              <Route path="/admin/cms" element={<AdminRoute element={<AdminCMS />} allowedRoles={["admin","marketing"]} user={user} />} />
+              <Route path="/admin/testimonials" element={<AdminRoute element={<AdminTestimonials />} allowedRoles={["admin","marketing"]} user={user} />} />
+              <Route path="/admin/categories" element={<AdminRoute element={<AdminCategories />} allowedRoles={["admin"]} user={user} />} />
+              <Route path="/admin/settings" element={<AdminRoute element={<AdminSettings />} allowedRoles={["super_admin"]} user={user} />} />
+              {/* Sécurité */}
+              <Route path="/admin/security" element={<AdminRoute element={<AdminSecurity />} allowedRoles={["admin","moderator","support"]} user={user} />} />
+              <Route path="/admin/roles" element={<AdminRoute element={<AdminRoles />} allowedRoles={["super_admin"]} user={user} />} />
+              {/* Analytics */}
+              <Route path="/admin/analytics" element={<AdminRoute element={<AdminAnalytics />} allowedRoles={["admin","marketing"]} user={user} />} />
+              <Route path="/admin/premium" element={<AdminRoute element={<AdminPremium />} allowedRoles={["super_admin"]} user={user} />} />
+              {/* Legacy */}
+              <Route path="/admin/activity-log" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
+              <Route path="/admin/user-activity" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
+              <Route path="/admin/help" element={<AdminRoute element={<AdminHelp />} allowedRoles={["admin","support"]} user={user} />} />
+            </>
+          </Route>
+        )}
+        {!canAccessAdmin && <Route path="/admin/*" element={<Navigate to="/admin/login" replace />} />}
+        <Route path="*" element={<PageNotFound />} />
+      </>
     </Routes>
   );
 };
 
 
-function App() {
-
-  return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClientInstance}>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <SiteAnalyticsTracker />
-          <AuthenticatedApp />
-        </Router>
-        <Toaster />
-        <SonnerToaster richColors position="top-right" />
-      </QueryClientProvider>
-    </AuthProvider>
-  )
-}
-
-export default App
+export default AuthenticatedApp;

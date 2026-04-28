@@ -30,6 +30,7 @@ const registrationSchema = z.object({
   has_gmail_account: z.boolean().optional(),
   status: z.enum(["en_attente", "en_attente_paiement", "validee", "refusee"]).optional(),
   registration_method: z.enum(["email_auto", "formulaire"]).optional(),
+  extra_data: z.record(z.string(), z.unknown()).optional().default({}),
 });
 
 // GET /registrations — list (authenticated: admin sees all, creator sees own, else 401)

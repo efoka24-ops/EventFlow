@@ -102,18 +102,18 @@ export default function Navbar() {
               </Link>
             ))}
             {hasParticipantSession && (
-              <Link to="/participant/profile">
-                <Button variant={isActive("/participant/profile", false) ? "secondary" : "ghost"} size="sm" className="gap-1.5 text-sm">
-                  <User className="w-3.5 h-3.5" /> Profil
-                </Button>
-              </Link>
-            )}
-            {hasParticipantSession && (
-              <Link to="/participant/tickets">
-                <Button variant={isActive("/participant/tickets", false) ? "secondary" : "ghost"} size="sm" className="gap-1.5 text-sm">
-                  <Ticket className="w-3.5 h-3.5" /> Mes billets
-                </Button>
-              </Link>
+              <>
+                <Link to="/participant/profile">
+                  <Button variant={isActive("/participant/profile", false) ? "secondary" : "ghost"} size="sm" className="gap-1.5 text-sm">
+                    <User className="w-3.5 h-3.5" /> Profil
+                  </Button>
+                </Link>
+                <Link to="/participant/tickets">
+                  <Button variant={isActive("/participant/tickets", false) ? "secondary" : "ghost"} size="sm" className="gap-1.5 text-sm">
+                    <Ticket className="w-3.5 h-3.5" /> Mes billets
+                  </Button>
+                </Link>
+              </>
             )}
             {isCreatorConnected && (
               <Link to="/dashboard">
@@ -141,25 +141,9 @@ export default function Navbar() {
                 <LogOut className="w-3.5 h-3.5" /> Se déconnecter
               </Button>
             ) : (
-              <>
-                {hasParticipantSession && (
-                  <Link to="/participant/profile">
-                    <Button variant="outline" size="sm" className="gap-1.5 rounded-full text-sm">
-                      <User className="w-3.5 h-3.5" /> Profil
-                    </Button>
-                  </Link>
-                )}
-                {hasParticipantSession && (
-                  <Link to="/participant/tickets">
-                    <Button variant="outline" size="sm" className="gap-1.5 rounded-full text-sm">
-                      <Ticket className="w-3.5 h-3.5" /> Mes billets
-                    </Button>
-                  </Link>
-                )}
-                <Link to="/submit-event">
-                  <Button variant="ghost" size="sm" className="text-sm">Se connecter</Button>
-                </Link>
-              </>
+              <Link to="/submit-event">
+                <Button variant="ghost" size="sm" className="text-sm">Se connecter</Button>
+              </Link>
             )}
           </div>
 

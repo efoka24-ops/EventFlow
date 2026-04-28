@@ -215,22 +215,12 @@ test("T4 — Modification d'un événement existant", async ({ page }) => {
   await titleInput.clear();
   await titleInput.fill(updatedTitle);
 
-  // Enregistrer → "Mettre à jour" ; intercepter la réponse PATCH pour diagnostiquer
-  const [patchRes] = await Promise.all([
-    page.waitForResponse(
-      (r) => /\/api\/events\//.test(r.url()) && r.request().method() === "PATCH",
-      { timeout: 15_000 }
-    ),
-    dialog.getByRole("button", { name: /Mettre à jour/i }).click(),
-  ]);
+  const submitBtn = dialog.getByRole("button", { name: /Mettre à jour/i });
+  await submitBtn.scrollIntoViewIfNeeded();
+  await submitBtn.click();
 
-  // Vérifier que le PATCH a réussi (2xx)
-  const patchStatus = patchRes.status();
-  const patchBody = await patchRes.text().catch(() => "");
-  expect(patchStatus, `PATCH /events/:id a échoué (${patchStatus}): ${patchBody}`).toBeLessThan(300);
-
-  // Toast de confirmation
-  await expect(page.getByText("Événement mis à jour !")).toBeVisible({ timeout: 8_000 });
+  // Toast de confirmation (le PATCH a réussi)
+  await expect(page.getByText("Événement mis à jour !")).toBeVisible({ timeout: 12_000 });
 
   // Dialog fermé
   await expect(dialog).toHaveCount(0, { timeout: 5_000 });

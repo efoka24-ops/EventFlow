@@ -9,13 +9,14 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, MoreHorizontal, Pencil, Trash2, Eye, CheckCircle2, XCircle, Star, Search, Filter } from "lucide-react";
+import { Plus, MoreHorizontal, Pencil, Trash2, Eye, CheckCircle2, XCircle, Star, Search, Filter, ListChecks } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { getCategoryLabel, STATUS_LABELS } from "@/lib/constants";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import EventFormDialog from "@/components/admin/EventFormDialog";
+import EventFormFieldsDialog from "@/components/admin/EventFormFieldsDialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -40,6 +41,7 @@ export default function AdminEvents() {
   const [showForm, setShowForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
+  const [fieldsEvent, setFieldsEvent] = useState(null);
   const [tab, setTab] = useState("all");
   const [search, setSearch] = useState("");
   const qc = useQueryClient();
@@ -234,6 +236,9 @@ export default function AdminEvents() {
                           <DropdownMenuItem className="gap-2" onClick={() => { setEditingEvent(e); setShowForm(true); }}>
                             <Pencil className="w-3.5 h-3.5" />Modifier
                           </DropdownMenuItem>
+                          <DropdownMenuItem className="gap-2" onClick={() => setFieldsEvent(e)}>
+                            <ListChecks className="w-3.5 h-3.5" />Champs du formulaire
+                          </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem className="gap-2 text-destructive" onClick={() => setDeleteId(e.id)}>
                             <Trash2 className="w-3.5 h-3.5" />Supprimer
@@ -254,6 +259,14 @@ export default function AdminEvents() {
           open={showForm}
           onClose={() => { setShowForm(false); setEditingEvent(null); }}
           event={editingEvent}
+        />
+      )}
+
+      {fieldsEvent && (
+        <EventFormFieldsDialog
+          open={!!fieldsEvent}
+          onClose={() => setFieldsEvent(null)}
+          event={fieldsEvent}
         />
       )}
 

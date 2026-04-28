@@ -30,13 +30,16 @@ export default function EventFormDialog({ open, onClose, event }) {
   const onCropComplete = useCallback((_, croppedAreaPixels) => {
     setCroppedAreaPixels(croppedAreaPixels);
   }, []);
+  // Normalize date from DB ("2026-04-30 10:00:00" → "2026-04-30T10:00") for datetime-local inputs.
+  const normDate = (d) => (d ? String(d).replace(" ", "T").slice(0, 16) : "");
+
   const [form, setForm] = useState(event ? {
     ...event,
     title: event.title || "",
     description: event.description || "",
     category: event.category || "autre",
-    date_start: event.date_start || "",
-    date_end: event.date_end || "",
+    date_start: normDate(event.date_start),
+    date_end: normDate(event.date_end),
     location_name: event.location_name || "",
     city: event.city || "",
     address: event.address || "",
@@ -186,11 +189,11 @@ export default function EventFormDialog({ open, onClose, event }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Date de début *</Label>
-              <Input type="datetime-local" required value={form.date_start?.slice(0, 16)} onChange={(e) => handleChange("date_start", e.target.value)} />
+              <Input type="datetime-local" required value={form.date_start} onChange={(e) => handleChange("date_start", e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label>Date de fin</Label>
-              <Input type="datetime-local" value={form.date_end?.slice(0, 16) || ""} onChange={(e) => handleChange("date_end", e.target.value)} />
+              <Input type="datetime-local" value={form.date_end} onChange={(e) => handleChange("date_end", e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -258,26 +261,28 @@ export default function EventFormDialog({ open, onClose, event }) {
               L'image sera automatiquement redimensionnée. Vous pouvez recadrer l'image avant l'envoi.</span>
             </div>
             {showCropper && (
-              <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center">
-                <div className="bg-white p-4 rounded-xl w-[90vw] max-w-xl border-4 border-red-500">
-                  <Cropper
-                    image={rawImage}
-                    crop={crop}
-                    zoom={zoom}
-                    aspect={1200/630}
-                    onCropChange={setCrop}
-                    onZoomChange={setZoom}
-                    onCropComplete={onCropComplete}
-                  />
-                  <div className="flex justify-end gap-2 mt-4 bg-yellow-200 p-2 rounded border border-yellow-400">
+              <div className="fixed inset-0 z-[9999] bg-black/80 flex items-center justify-center p-4">
+                <div className="bg-white rounded-xl w-[90vw] max-w-xl flex flex-col overflow-hidden" style={{ height: "min(90vh, 480px)" }}>
+                  <div className="p-4 border-b border-border">
+                    <p className="font-semibold text-sm">Recadrer l'image</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Format recommandé : 1200×630 px (paysage)</p>
+                  </div>
+                  <div className="relative flex-1">
+                    <Cropper
+                      image={rawImage}
+                      crop={crop}
+                      zoom={zoom}
+                      aspect={1200/630}
+                      onCropChange={setCrop}
+                      onZoomChange={setZoom}
+                      onCropComplete={onCropComplete}
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 p-4 border-t border-border">
                     <Button type="button" variant="outline" onClick={() => {
                       setShowCropper(false);
                       setRawImage(null);
                     }}>Annuler</Button>
-                    <Button type="button" variant="secondary" onClick={() => {
-                      setShowCropper(false);
-                      // On garde l'image brute, pas de crop ni d'upload
-                    }}>Ignorer</Button>
                     <Button type="button" onClick={handleCropConfirm} disabled={imageUploading}>
                       {imageUploading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                       Recadrer
