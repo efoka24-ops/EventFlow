@@ -36,6 +36,11 @@ export default function FooterSaaS() {
                   Guide d'utilisation
                 </Link>
               </li>
+              <li>
+                <Link to="/contact" className="hover:text-white transition">
+                  Nous contacter
+                </Link>
+              </li>
             </ul>
           </div>
 
