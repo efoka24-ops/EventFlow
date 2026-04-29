@@ -111,6 +111,7 @@ export default function UserDashboard() {
   const [regSearch, setRegSearch] = useState("");
   const [regStatusFilter, setRegStatusFilter] = useState("all");
   const [validatingId, setValidatingId] = useState(null);
+  const [refusingId, setRefusingId] = useState(null);
 
   // ── Messaging state ────────────────────────────────────────────────────
   const [msgEventId, setMsgEventId] = useState("all");
@@ -246,11 +247,13 @@ export default function UserDashboard() {
   };
 
   const handleRefuse = async (reg) => {
+    setRefusingId(reg.id);
     try {
       await updateRegistration(reg.id, { status: "refusee", refused_date: new Date().toISOString() });
       queryClient.invalidateQueries({ queryKey: ["dashboard-registrations"] });
       toast.success("Inscription refusée");
     } catch { toast.error("Impossible de refuser"); }
+    finally { setRefusingId(null); }
   };
 
   const handleDeleteEvent = async () => {
@@ -716,30 +719,55 @@ export default function UserDashboard() {
                     {filteredRegs.map((reg) => {
                       const sm = REGISTRATION_STATUS[reg.status] || { label: reg.status, color: "bg-muted" };
                       const evTitle = events.find((e) => e.id === reg.event_id)?.title || "—";
+                      const isPending = reg.status === "en_attente" || reg.status === "en_attente_paiement";
+                      const isValidating = validatingId === reg.id;
+                      const isRefusing = refusingId === reg.id;
                       return (
-                        <div key={reg.id} className="flex items-center gap-3 p-3 rounded-xl border border-border/40 hover:bg-muted/20 transition-colors">
-                          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0">
-                            {(reg.first_name || "?")[0].toUpperCase()}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold">{reg.first_name} {reg.last_name}</p>
-                            <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
-                              {reg.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{reg.email}</span>}
-                              {reg.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{reg.phone}</span>}
-                              <span className="truncate max-w-[140px]">{evTitle}</span>
+                        <div key={reg.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-xl border border-border/40 hover:bg-muted/20 transition-colors">
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary shrink-0">
+                              {(reg.first_name || "?")[0].toUpperCase()}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold">{reg.first_name} {reg.last_name}</p>
+                              <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
+                                {reg.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{reg.email}</span>}
+                                {reg.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{reg.phone}</span>}
+                                <span className="truncate max-w-[140px]">{evTitle}</span>
+                              </div>
+                              {reg.confirmation_code && (
+                                <span className="inline-block mt-0.5 font-mono text-[11px] bg-muted px-1.5 py-0.5 rounded text-muted-foreground tracking-widest">
+                                  #{reg.confirmation_code}
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <Badge className={`${sm.color} text-xs shrink-0`}>{sm.label}</Badge>
-                          {reg.status === "en_attente" && (
-                            <div className="flex gap-1 shrink-0">
-                              <Button size="sm" className="h-7 px-2 text-xs gap-1 rounded-full" onClick={() => handleValidate(reg)} disabled={validatingId === reg.id}>
-                                {validatingId === reg.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />} Valider
-                              </Button>
-                              <Button size="sm" variant="outline" className="h-7 px-2 text-xs rounded-full text-destructive border-destructive/30 hover:bg-destructive/10" onClick={() => handleRefuse(reg)}>
-                                Refuser
-                              </Button>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2 shrink-0">
+                            <Badge className={`${sm.color} text-xs`}>{sm.label}</Badge>
+                            {isPending && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  className="h-7 px-2 text-xs gap-1 rounded-full"
+                                  onClick={() => handleValidate(reg)}
+                                  disabled={isValidating || isRefusing}
+                                >
+                                  {isValidating ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                  Valider
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 px-2 text-xs rounded-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                                  onClick={() => handleRefuse(reg)}
+                                  disabled={isValidating || isRefusing}
+                                >
+                                  {isRefusing ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
+                                  Refuser
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
