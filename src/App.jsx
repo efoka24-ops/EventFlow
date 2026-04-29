@@ -39,6 +39,7 @@ import AdminCMS from '@/components/pages/admin/AdminCMS';
 import AdminRoles from '@/components/pages/admin/AdminRoles';
 import AdminTestimonials from '@/components/pages/admin/AdminTestimonials';
 import AdminPremium from '@/components/pages/admin/AdminPremium';
+import GuideUtilisation from '@/components/pages/GuideUtilisation';
 
 import { getCreatorUser } from '@/lib/creatorSession';
 import { useEffect, useState } from 'react';
@@ -135,6 +136,7 @@ const AuthenticatedApp = () => {
             <Route path="/submit-event" element={<SubmitEvent />} />
             <Route path="/participant/profile" element={<ParticipantProfile />} />
             <Route path="/participant/tickets" element={<ParticipantTickets />} />
+            <Route path="/guide" element={<GuideUtilisation />} />
             <Route path="/admin/login" element={<AdminLogin />} />
           </>
         </Route>

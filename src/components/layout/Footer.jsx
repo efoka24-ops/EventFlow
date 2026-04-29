@@ -8,6 +8,7 @@ const footerLinks = {
     { label: "Créer un événement", to: "/submit-event" },
     { label: "Mes billets", to: "/participant/tickets" },
     { label: "Centre d'aide", to: "/help" },
+    { label: "Guide d'utilisation", to: "/guide" },
   ],
   organisateurs: [
     { label: "Soumettre un événement", to: "/submit-event" },
