@@ -8,7 +8,7 @@ import { useAuth } from "@/libs/AuthContext";
 import {
   LayoutDashboard, Users, UserCog, CalendarDays, CreditCard, TrendingUp,
   Megaphone, Bell, FileText, ShieldAlert, Tag, BarChart3, KeyRound, Store,
-  Settings, ChevronDown, ChevronRight, Zap, MessageSquareQuote,
+  Settings, ChevronDown, ChevronRight, Zap, MessageSquareQuote, Mail, BookOpen,
 } from "lucide-react";
 
 // roles: omit to allow all; '*' = all; array = specific roles allowed
@@ -52,6 +52,8 @@ const NAV_GROUPS = [
     items: [
       { label: "CMS", path: "/admin/cms", icon: FileText, roles: ["admin", "marketing"] },
       { label: "Témoignages", path: "/admin/testimonials", icon: MessageSquareQuote, roles: ["admin", "marketing"] },
+      { label: "Messages de contact", path: "/admin/contact-messages", icon: Mail, badgeKey: "unread_contacts", roles: ["admin", "support"] },
+      { label: "Guide d'utilisation", path: "/admin/guide", icon: BookOpen, roles: ["admin", "marketing"] },
       { label: "Catégories", path: "/admin/categories", icon: Tag, roles: ["admin"] },
       { label: "Paramètres", path: "/admin/settings", icon: Settings, roles: ["super_admin"] },
     ],
@@ -113,7 +115,7 @@ function NavItem({ item, badgeCount }) {
   );
 }
 
-function NavGroup({ group, role, pendingEvents }) {
+function NavGroup({ group, role, pendingEvents, unreadContacts }) {
   const location = useLocation();
   const visibleItems = group.items.filter((item) => isAllowed(item, role));
   if (visibleItems.length === 0) return null;
@@ -138,7 +140,10 @@ function NavGroup({ group, role, pendingEvents }) {
             <NavItem
               key={item.path}
               item={item}
-              badgeCount={item.badgeKey === "pending_events" ? pendingEvents : 0}
+              badgeCount={
+                item.badgeKey === "pending_events" ? pendingEvents :
+                item.badgeKey === "unread_contacts" ? unreadContacts : 0
+              }
             />
           ))}
         </div>
@@ -146,6 +151,8 @@ function NavGroup({ group, role, pendingEvents }) {
     </div>
   );
 }
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
 
 export default function AdminSidebar() {
   const { user } = useAuth();
@@ -158,13 +165,27 @@ export default function AdminSidebar() {
     staleTime: 30_000,
   });
 
+  const { data: contactStats } = useQuery({
+    queryKey: ["contact-unread-count"],
+    queryFn: async () => {
+      const token = localStorage.getItem("eventflow_admin_token");
+      const r = await fetch(`${API_BASE}/contact/stats`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      return r.ok ? r.json() : { unread: 0 };
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   const pendingEvents = stats?.pending_events || 0;
+  const unreadContacts = contactStats?.unread || 0;
 
   return (
     <aside className="w-60 bg-card border-r border-border min-h-[calc(100vh-4rem)] flex flex-col hidden lg:flex">
       <div className="flex-1 overflow-y-auto p-3 space-y-1">
         {NAV_GROUPS.map((group) => (
-          <NavGroup key={group.label} group={group} role={role} pendingEvents={pendingEvents} />
+          <NavGroup key={group.label} group={group} role={role} pendingEvents={pendingEvents} unreadContacts={unreadContacts} />
         ))}
       </div>
       <div className="p-3 border-t border-border">

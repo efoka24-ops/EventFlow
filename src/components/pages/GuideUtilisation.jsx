@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,9 +55,17 @@ function FeatureCard({ icon: Icon, title, description, badge }) {
   );
 }
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001/api";
+
 // ── Page principale ───────────────────────────────────────────────────────────
 export default function GuideUtilisation() {
   const [tab, setTab] = useState("participant");
+
+  const { data: faqs = [] } = useQuery({
+    queryKey: ["guide-faqs"],
+    queryFn: () => fetch(`${API_BASE}/guide-faqs`).then((r) => r.json()).catch(() => []),
+    staleTime: 5 * 60_000,
+  });
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 space-y-10">
@@ -310,34 +319,15 @@ export default function GuideUtilisation() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 divide-y divide-border/40">
-              {[
-                {
-                  q: "Dois-je créer un compte pour m'inscrire à un événement ?",
-                  a: "Non. Vous pouvez vous inscrire avec votre email et/ou numéro de téléphone, sans créer de compte. Un compte permet simplement de pré-remplir vos informations.",
-                },
-                {
-                  q: "Comment récupérer mes billets si j'ai perdu l'email ?",
-                  a: "Rendez-vous sur /participant/tickets et entrez votre email d'inscription. Tous vos billets apparaissent automatiquement.",
-                },
-                {
-                  q: "Combien coûte la création d'un événement ?",
-                  a: "La création d'un événement est gratuite. Pour les événements payants, une commission est prélevée sur les transactions Mobile Money.",
-                },
-                {
-                  q: "Mon événement peut-il être rejeté ?",
-                  a: "Oui. L'équipe EventFlow examine chaque événement soumis pour s'assurer qu'il respecte les conditions d'utilisation avant publication.",
-                },
-                {
-                  q: "Puis-je modifier un événement après publication ?",
-                  a: "Oui, depuis votre dashboard (onglet Événements → bouton Modifier). Certaines modifications peuvent nécessiter une nouvelle validation.",
-                },
-              ].map(({ q, a }) => (
-                <div key={q} className="pt-4 first:pt-0 space-y-1">
+              {faqs.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-2">Aucune question fréquente pour l'instant.</p>
+              ) : faqs.map((faq) => (
+                <div key={faq.id} className="pt-4 first:pt-0 space-y-1">
                   <p className="text-sm font-semibold flex items-start gap-2">
                     <ChevronRight className="w-4 h-4 text-primary mt-0.5 shrink-0" />
-                    {q}
+                    {faq.question}
                   </p>
-                  <p className="text-sm text-muted-foreground pl-6">{a}</p>
+                  <p className="text-sm text-muted-foreground pl-6">{faq.answer}</p>
                 </div>
               ))}
             </CardContent>
@@ -354,11 +344,11 @@ export default function GuideUtilisation() {
               <HelpCircle className="w-4 h-4" /> Centre d'aide
             </Button>
           </Link>
-          <a href="mailto:eventflow@trugroup.cm">
+          <Link to="/contact">
             <Button variant="outline" className="gap-2 rounded-full">
               <ArrowRight className="w-4 h-4" /> Contactez-nous
             </Button>
-          </a>
+          </Link>
         </div>
       </div>
     </div>

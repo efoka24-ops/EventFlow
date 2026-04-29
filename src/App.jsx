@@ -41,6 +41,8 @@ import AdminTestimonials from '@/components/pages/admin/AdminTestimonials';
 import AdminPremium from '@/components/pages/admin/AdminPremium';
 import GuideUtilisation from '@/components/pages/GuideUtilisation';
 import Contact from '@/components/pages/Contact';
+import AdminContactMessages from '@/components/pages/admin/AdminContactMessages';
+import AdminGuide from '@/components/pages/admin/AdminGuide';
 
 import { getCreatorUser } from '@/lib/creatorSession';
 import { useEffect, useState } from 'react';
@@ -193,6 +195,8 @@ const AuthenticatedApp = () => {
               <Route path="/admin/activity-log" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
               <Route path="/admin/user-activity" element={<AdminRoute element={<AdminUserActivity />} allowedRoles={["admin"]} user={user} />} />
               <Route path="/admin/help" element={<AdminRoute element={<AdminHelp />} allowedRoles={["admin","support"]} user={user} />} />
+              <Route path="/admin/contact-messages" element={<AdminRoute element={<AdminContactMessages />} allowedRoles={["admin","support"]} user={user} />} />
+              <Route path="/admin/guide" element={<AdminRoute element={<AdminGuide />} allowedRoles={["admin","marketing"]} user={user} />} />
             </>
           </Route>
         )}

@@ -14,6 +14,7 @@ import publicSettingsRoutes from "./publicSettings.js";
 import testimonialsRoutes from "./testimonials.js";
 import formFieldsRoutes from "./formFields.js";
 import contactRoutes from "./contact.js";
+import guideFaqsRoutes from "./guideFaqs.js";
 
 export const apiRouter = Router();
 
@@ -32,3 +33,4 @@ apiRouter.use("/testimonials", testimonialsRoutes);
 apiRouter.use("/admin", adminRoutes);
 apiRouter.use("/form-fields", formFieldsRoutes);
 apiRouter.use("/contact", contactRoutes);
+apiRouter.use("/guide-faqs", guideFaqsRoutes);
