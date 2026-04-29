@@ -31,6 +31,11 @@ export default function FooterSaaS() {
                   </a>
                 </li>
               ))}
+              <li>
+                <Link to="/guide" className="hover:text-white transition">
+                  Guide d'utilisation
+                </Link>
+              </li>
             </ul>
           </div>
 
