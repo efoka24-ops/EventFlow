@@ -40,6 +40,7 @@ import AdminRoles from '@/components/pages/admin/AdminRoles';
 import AdminTestimonials from '@/components/pages/admin/AdminTestimonials';
 import AdminPremium from '@/components/pages/admin/AdminPremium';
 import GuideUtilisation from '@/components/pages/GuideUtilisation';
+import Contact from '@/components/pages/Contact';
 
 import { getCreatorUser } from '@/lib/creatorSession';
 import { useEffect, useState } from 'react';
@@ -137,6 +138,7 @@ const AuthenticatedApp = () => {
             <Route path="/participant/profile" element={<ParticipantProfile />} />
             <Route path="/participant/tickets" element={<ParticipantTickets />} />
             <Route path="/guide" element={<GuideUtilisation />} />
+            <Route path="/contact" element={<Contact />} />
             <Route path="/admin/login" element={<AdminLogin />} />
           </>
         </Route>

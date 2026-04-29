@@ -13,6 +13,7 @@ import adminRoutes from "./admin.js";
 import publicSettingsRoutes from "./publicSettings.js";
 import testimonialsRoutes from "./testimonials.js";
 import formFieldsRoutes from "./formFields.js";
+import contactRoutes from "./contact.js";
 
 export const apiRouter = Router();
 
@@ -30,3 +31,4 @@ apiRouter.use("/public-settings", publicSettingsRoutes);
 apiRouter.use("/testimonials", testimonialsRoutes);
 apiRouter.use("/admin", adminRoutes);
 apiRouter.use("/form-fields", formFieldsRoutes);
+apiRouter.use("/contact", contactRoutes);
