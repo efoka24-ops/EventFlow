@@ -15,6 +15,8 @@ app.disable("x-powered-by");
 const globalLimiter = createRateLimiter({ windowMs: 60_000, max: 300, name: "global" });
 const authLimiter = createRateLimiter({ windowMs: 15 * 60_000, max: 40, name: "auth" });
 const paymentLimiter = createRateLimiter({ windowMs: 10 * 60_000, max: 80, name: "payments" });
+const ticketsLimiter = createRateLimiter({ windowMs: 60_000, max: 20, name: "tickets" });
+const contactLimiter = createRateLimiter({ windowMs: 60 * 60_000, max: 10, name: "contact" });
 
 app.use(
   helmet({
@@ -31,7 +33,12 @@ app.use(
 app.use(globalLimiter);
 app.use("/api/auth", authLimiter);
 app.use("/api/payments", paymentLimiter);
-app.use(express.json({ limit: "2mb" }));
+app.use("/api/registrations/my-tickets", ticketsLimiter);
+app.use("/api/contact", contactLimiter);
+app.use(express.json({
+  limit: "2mb",
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.urlencoded({ extended: false, limit: "2mb" }));
 app.use(cookieParser());
 app.use(morgan("dev"));

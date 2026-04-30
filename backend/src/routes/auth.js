@@ -58,7 +58,7 @@ const creatorSignupSchema = z.object({
   full_name: z.string().min(1),
   email: z.string().email(),
   phone: z.string().min(1),
-  password: z.string().min(4),
+  password: z.string().min(8),
   geo_latitude: z.number().optional(),
   geo_longitude: z.number().optional(),
   geo_accuracy: z.number().optional(),
@@ -76,7 +76,7 @@ const creatorProfileUpdateSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().min(1).optional(),
   current_password: z.string().min(1).optional(),
-  new_password: z.string().min(4).optional(),
+  new_password: z.string().min(8).optional(),
 });
 
 const adminLoginSchema = z.object({
@@ -101,13 +101,13 @@ router.post("/creator/signup", async (req, res, next) => {
     const hashed = await hashPassword(payload.password);
     const created = await query(
       `INSERT INTO creator_accounts (
-         full_name, email, phone, password_hash, password,
+         full_name, email, phone, password_hash,
          geo_latitude, geo_longitude, geo_accuracy, geo_source, geo_captured_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id, full_name, email, phone, created_date`,
       [
-        payload.full_name.trim(), email, phone, hashed, payload.password,
+        payload.full_name.trim(), email, phone, hashed,
         payload.geo_latitude ?? null, payload.geo_longitude ?? null,
         payload.geo_accuracy ?? null, payload.geo_source || null,
         payload.geo_captured_at || null,
@@ -137,7 +137,7 @@ router.post("/creator/login", async (req, res, next) => {
     const identifier = payload.identifier.trim().toLowerCase();
 
     const result = await query(
-      `SELECT id, full_name, email, phone, password, password_hash
+      `SELECT id, full_name, email, phone, password_hash
        FROM creator_accounts
        WHERE LOWER(email) = $1 OR phone = $2
        LIMIT 1`,
@@ -146,9 +146,8 @@ router.post("/creator/login", async (req, res, next) => {
     if (!result.rowCount) return next(httpError(401, "Invalid credentials"));
 
     const account = result.rows[0];
-    const isValid = account.password_hash
-      ? await comparePassword(payload.password, account.password_hash)
-      : payload.password === account.password;
+    if (!account.password_hash) return next(httpError(401, "Invalid credentials"));
+    const isValid = await comparePassword(payload.password, account.password_hash);
     if (!isValid) return next(httpError(401, "Invalid credentials"));
 
     const user = { id: account.id, full_name: account.full_name, email: account.email, phone: account.phone };
@@ -379,7 +378,7 @@ router.patch("/creator/me", requireAuth, async (req, res, next) => {
     const accountId = req.user.sub;
 
     const accountResult = await query(
-      "SELECT id, full_name, email, phone, password, password_hash FROM creator_accounts WHERE id = $1 LIMIT 1",
+      "SELECT id, full_name, email, phone, password_hash FROM creator_accounts WHERE id = $1 LIMIT 1",
       [accountId]
     );
     if (!accountResult.rowCount) return next(httpError(404, "User not found"));
@@ -417,16 +416,13 @@ router.patch("/creator/me", requireAuth, async (req, res, next) => {
 
     if (payload.new_password !== undefined) {
       if (!payload.current_password) return next(httpError(400, "Current password is required"));
-      const isValid = account.password_hash
-        ? await comparePassword(payload.current_password, account.password_hash)
-        : payload.current_password === account.password;
+      if (!account.password_hash) return next(httpError(401, "Current password is invalid"));
+      const isValid = await comparePassword(payload.current_password, account.password_hash);
       if (!isValid) return next(httpError(401, "Current password is invalid"));
 
       const newHashed = await hashPassword(payload.new_password);
       updates.push(`password_hash = $${i++}`);
       values.push(newHashed);
-      updates.push(`password = $${i++}`);
-      values.push(payload.new_password);
     }
 
     if (!updates.length) return next(httpError(400, "No valid fields to update"));

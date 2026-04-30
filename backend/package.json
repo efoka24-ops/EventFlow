@@ -10,6 +10,7 @@
     "db:migrate": "node src/scripts/migrateDb.js",
     "db:seed-admin": "node src/scripts/seedAdmin.js",
     "db:bootstrap": "node src/scripts/bootstrapDb.js",
+    "db:migrate-passwords": "node src/scripts/migratePasswords.js",
     "test:e2e:business": "node src/scripts/e2eBusinessTest.js",
     "test:e2e:security": "node src/scripts/e2eSecurityTest.js",
     "test:e2e:load": "node src/scripts/e2eLoadTest.js"

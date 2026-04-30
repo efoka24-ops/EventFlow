@@ -19,9 +19,15 @@ const schema = z.object({
 router.get("/", async (req, res, next) => {
   try {
     const { sort, ...rawFilters } = req.query;
-    const { clause, values } = buildWhereClause(rawFilters, ["event_id", "participant_email"]);
+    // participant_email filter is restricted to admins to prevent email enumeration
+    const isAdmin = req.headers.authorization || req.cookies?.rf_token;
+    const allowedFilters = isAdmin ? ["event_id", "participant_email"] : ["event_id"];
+    if (!isAdmin) delete rawFilters.participant_email;
+    const { clause, values } = buildWhereClause(rawFilters, allowedFilters);
     const { field, direction } = parseSort(sort, ["created_date", "rating"], "-created_date");
-    const result = await query(`SELECT * FROM event_feedback ${clause} ORDER BY ${field} ${direction}`, values);
+    // Never expose participant email to public consumers
+    const columns = isAdmin ? "*" : "id, event_id, event_title, participant_name, rating, comment, created_date";
+    const result = await query(`SELECT ${columns} FROM event_feedback ${clause} ORDER BY ${field} ${direction}`, values);
     res.json(result.rows);
   } catch (err) {
     next(err);

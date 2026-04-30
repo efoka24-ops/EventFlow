@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "node:crypto";
 import { writeFileSync, existsSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +47,33 @@ const saveMemPayments = () => {
   try {
     writeFileSync(MEM_FILE, JSON.stringify(Object.fromEntries(memPayments)), "utf8");
   } catch { /* ignore */ }
+};
+
+// Vérifie la signature HMAC-SHA256 envoyée par Easy Transact dans X-ET-Signature
+const verifyEtWebhookSignature = (req) => {
+  const secret = config.etWebhookSecret;
+  if (!secret) {
+    console.warn("[webhook] ET_WEBHOOK_SECRET non configuré — vérification de signature ignorée");
+    return true;
+  }
+
+  const header = req.headers["x-et-signature"] || req.headers["x-webhook-signature"] || "";
+  const sigValue = header.replace(/^sha256=/, "").trim();
+  if (!sigValue) return false;
+
+  const rawBody = req.rawBody;
+  if (!rawBody) return false;
+
+  const expected = createHmac("sha256", secret).update(rawBody).digest("hex");
+
+  try {
+    const sigBuf = Buffer.from(sigValue, "hex");
+    const expBuf = Buffer.from(expected, "hex");
+    if (sigBuf.length !== expBuf.length) return false;
+    return timingSafeEqual(sigBuf, expBuf);
+  } catch {
+    return false;
+  }
 };
 
 const dbTryQuery = async (...args) => {
@@ -219,6 +246,11 @@ router.get("/reference/:reference", async (req, res, next) => {
 
 // POST /webhook/easytransact — receives ET payment callbacks
 router.post("/webhook/easytransact", async (req, res, next) => {
+  if (!verifyEtWebhookSignature(req)) {
+    console.warn("[webhook] Signature invalide ou absente — requête rejetée");
+    return next(httpError(401, "Invalid webhook signature"));
+  }
+
   try {
     const body = req.body || {};
     const vendorRef = body.vendor_reference || body.reference;

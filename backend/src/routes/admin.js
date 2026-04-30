@@ -93,29 +93,30 @@ router.get("/stats", async (req, res, next) => {
 // Monthly growth chart data
 router.get("/stats/growth", async (req, res, next) => {
   try {
-    const months = parseInt(req.query.months || 6);
+    const rawMonths = parseInt(req.query.months, 10);
+    const months = Number.isFinite(rawMonths) && rawMonths >= 1 && rawMonths <= 60 ? rawMonths : 6;
     const [registrationsGrowth, eventsGrowth, organizersGrowth] = await Promise.all([
       query(`SELECT
         TO_CHAR(DATE_TRUNC('month', created_date), 'Mon YYYY') AS month,
         DATE_TRUNC('month', created_date) AS month_date,
         COUNT(*) AS count
       FROM registrations
-      WHERE created_date >= NOW() - INTERVAL '${months} months'
-      GROUP BY month_date ORDER BY month_date`),
+      WHERE created_date >= NOW() - ($1 || ' months')::interval
+      GROUP BY month_date ORDER BY month_date`, [months]),
       query(`SELECT
         TO_CHAR(DATE_TRUNC('month', created_date), 'Mon YYYY') AS month,
         DATE_TRUNC('month', created_date) AS month_date,
         COUNT(*) AS count
       FROM events
-      WHERE created_date >= NOW() - INTERVAL '${months} months'
-      GROUP BY month_date ORDER BY month_date`),
+      WHERE created_date >= NOW() - ($1 || ' months')::interval
+      GROUP BY month_date ORDER BY month_date`, [months]),
       query(`SELECT
         TO_CHAR(DATE_TRUNC('month', created_date), 'Mon YYYY') AS month,
         DATE_TRUNC('month', created_date) AS month_date,
         COUNT(*) AS count
       FROM creator_accounts
-      WHERE created_date >= NOW() - INTERVAL '${months} months'
-      GROUP BY month_date ORDER BY month_date`),
+      WHERE created_date >= NOW() - ($1 || ' months')::interval
+      GROUP BY month_date ORDER BY month_date`, [months]),
     ]);
     res.json({
       registrations: registrationsGrowth.rows,
