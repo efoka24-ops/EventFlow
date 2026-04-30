@@ -42,7 +42,7 @@ router.get("/", requireAuth, async (req, res, next) => {
     const isCreator = req.user?.role === "creator";
 
     if (isCreator) {
-      // Creator sees only registrations on their events
+      // Creator sees ALL registrations on their own events
       const creatorEmail = String(req.user?.email || "").trim().toLowerCase();
       const creatorPhone = String(req.user?.phone || "").trim();
 
@@ -51,8 +51,7 @@ router.get("/", requireAuth, async (req, res, next) => {
       }
 
       const { rows: myEvents } = await query(
-        `SELECT id
-         FROM events
+        `SELECT id FROM events
          WHERE (LOWER(organizer_email) = LOWER($1) AND $1 <> '')
             OR (organizer_phone = $2 AND $2 <> '')`,
         [creatorEmail, creatorPhone]
@@ -60,18 +59,20 @@ router.get("/", requireAuth, async (req, res, next) => {
       const eventIds = myEvents.map((e) => e.id);
       if (!eventIds.length) return res.json([]);
 
-      // Ignore any email filter for creators (prevent IDOR)
+      // Security: ignore email filter from creators (prevent IDOR)
       if (filters.email) delete filters.email;
-      // If event_id filter present, validate it belongs to creator
+      // If filtering by event_id, validate it belongs to this creator
       if (filters.event_id && !eventIds.includes(filters.event_id)) {
         return res.json([]);
       }
-      // For any query, always restrict to creator's events AND their own email
+
+      const targetIds = filters.event_id ? [filters.event_id] : eventIds;
       const { field, direction } = parseSort(sort, ["created_date", "updated_date"], "-created_date");
-      const parsedLimit = parseLimit(limit, null, 500);
-      let sql = `SELECT * FROM registrations WHERE event_id IN (${eventIds.map((_, i) => `$${i + 1}`).join(", ")}) AND LOWER(email) = $${eventIds.length + 1}`;
-      let params = [...eventIds, creatorEmail];
-      // Apply other filters (except email) if present
+      const parsedLimit = parseLimit(limit, null, 1000);
+
+      let sql = `SELECT * FROM registrations WHERE event_id IN (${targetIds.map((_, i) => `$${i + 1}`).join(", ")})`;
+      let params = [...targetIds];
+
       const allowedFilters = ["id", "phone", "status", "registration_method"];
       for (const key of allowedFilters) {
         if (filters[key]) {
@@ -99,6 +100,28 @@ router.get("/", requireAuth, async (req, res, next) => {
     const params = parsedLimit ? [...values, parsedLimit] : values;
     const result = await query(sql, params);
     res.json(result.rows);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /registrations/verify/:code — vérification publique d'un code de confirmation
+router.get("/verify/:code", async (req, res, next) => {
+  try {
+    const code = String(req.params.code || "").trim().toUpperCase();
+    if (!code) return next(httpError(400, "Code requis"));
+
+    const { rows } = await query(
+      `SELECT r.id, r.first_name, r.last_name, r.email, r.phone, r.status,
+              r.confirmation_code, r.created_date,
+              e.title as event_title, e.date_start, e.city, e.organizer_name
+       FROM registrations r
+       JOIN events e ON e.id = r.event_id
+       WHERE r.confirmation_code = $1`,
+      [code]
+    );
+    if (!rows.length) return next(httpError(404, "Code de confirmation invalide ou inconnu"));
+    res.json(rows[0]);
   } catch (err) {
     next(err);
   }
@@ -165,8 +188,8 @@ router.post("/", optionalAuth, async (req, res, next) => {
     }
 
     const fields = Object.keys(payload).filter((k) => payload[k] !== undefined && payload[k] !== "");
-    const columns = fields.join(", ");
-    const placeholders = fields.map((_, i) => `$${i + 1}`).join(", ");
+    const columns = [...fields, "confirmation_code"].join(", ");
+    const placeholders = [...fields.map((_, i) => `$${i + 1}`), `UPPER(SUBSTRING(MD5(gen_random_uuid()::text) FROM 1 FOR 8))`].join(", ");
     const values = fields.map((f) => payload[f]);
 
     const result = await query(
